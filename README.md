@@ -1,92 +1,111 @@
-# European Handball Scouting Platform
+# Mittelalterspiel – Browser-Strategiespiel
 
-Professionelle, datenbasierte Scouting-Plattform für Sportdirektoren, Scouts, Trainer und Analysten.
+Ein browserbasiertes Mittelalter-Strategiespiel, inspiriert von Crusader Kings 3, Mount & Blade: Bannerlord und OpenFront. Spieler bauen Burgen, verwalten Ressourcen, rekrutieren Armeen und erobern Nachbarprovinzen.
 
----
+## Tech-Stack
 
-## Empfohlen: Über GitHub (nicht OneDrive)
-
-OneDrive kann Dateien verzögert synchronisieren und Streamlit-Fehler verursachen.
-**Projekt lokal klonen** (z. B. nach `C:\Projects\`) und von dort starten.
-
-### 1. Repository auf GitHub anlegen
-
-```powershell
-cd C:\Users\chair\OneDrive\Desktop\handball-scouting-tool
-gh auth login
-gh repo create handball-scouting-tool --public --source=. --remote=origin --push
-```
-
-### 2. Frisch klonen (empfohlen)
-
-```powershell
-mkdir C:\Projects -ErrorAction SilentlyContinue
-cd C:\Projects
-git clone https://github.com/DEIN-USERNAME/handball-scouting-tool.git
-cd handball-scouting-tool
-pip install -r requirements.txt
-streamlit run app.py
-```
-
-Browser: **http://localhost:8501**
-
----
-
-## Lokaler Start (ohne Clone)
-
-```powershell
-pip install -r requirements.txt
-streamlit run app.py
-```
-
-Die SQLite-Datenbank (`data/scouting.db`) wird beim ersten Start automatisch aus den CSV-Dateien erzeugt.
-
----
-
-## Technologien
-
-| Layer | Stack |
-|-------|--------|
-| UI | Streamlit (dunkles Design) |
-| Analyse | Pandas, Scikit-Learn, Plotly |
-| Datenbank | SQLite (`data/scouting.db`) |
-| Architektur | Modular, wiederverwendbare Komponenten |
-
----
+| Bereich   | Technologie                          |
+| --------- | ------------------------------------ |
+| Frontend  | React, TypeScript, Vite, TailwindCSS |
+| Backend   | Node.js, NestJS, JWT                 |
+| Datenbank | PostgreSQL, Prisma                   |
+| Monorepo  | npm workspaces                       |
 
 ## Projektstruktur
 
 ```
-handball-scouting-tool/
-├── app.py                 # Einstieg → Navigation
-├── Home.py                # Startseite
-├── pages/
-│   ├── dashboard.py
-│   ├── scouting_search.py
-│   ├── player_profile.py
-│   ├── player_compare.py
-│   ├── shortlists.py
-│   ├── reports.py
-│   ├── data_import.py
-│   └── leagues.py
-├── components/            # theme, cards, tables, charts, filters
-├── analytics/             # metrics, scoring, similarity, insights
-├── config/score_weights.py
-├── database/              # SQLite, Shortlist-Helper
-├── reports/               # Berichtsgenerator
-└── utils/                 # data_service, validation, navigation
+client/          React-Frontend
+server/          NestJS-Backend (REST-API)
+shared/          Gemeinsame Spiellogik (Schlachten, Einheiten, Gebäude)
+database/        Prisma-Schema
+docs/            Dokumentation
+.github/         CI/CD (GitHub Actions)
 ```
 
----
+## Voraussetzungen
 
-## Scoring anpassen
+- Node.js >= 20
+- PostgreSQL >= 14
+- npm >= 10
 
-Gewichtungen in `config/score_weights.py` – Berechnung in `analytics/scoring.py`.
+## Schnellstart
 
----
+### 1. Repository klonen und Abhängigkeiten installieren
 
-## Roadmap
+```bash
+git clone <repo-url>
+cd mittelalterspiel
+npm install
+```
 
-- [ ] PostgreSQL-Migration
-- [ ] PDF-Export (`reports/pdf_export.py`)
-- [ ] Benutzerverwaltung & API
+### 2. Umgebungsvariablen
+
+```bash
+cp .env.example .env
+# DATABASE_URL und JWT_SECRET anpassen
+```
+
+### 3. Datenbank einrichten
+
+```bash
+npm run db:generate
+npm run db:push
+npm run db:seed
+```
+
+### 4. Entwicklungsserver starten
+
+```bash
+npm run dev
+```
+
+- Frontend: http://localhost:5173
+- Backend-API: http://localhost:3001/api
+
+## MVP-Funktionen
+
+- [x] Registrierung und Login (JWT)
+- [x] Profilverwaltung (Benutzername, Passwort)
+- [x] Weltkarte mit 17 Provinzen
+- [x] Startburg und -dorf bei Registrierung
+- [x] Ressourcen (Gold, Nahrung, Holz, Stein, Eisen, Einfluss, Ruhm)
+- [x] Gebäude bauen (Bauernhof, Mine, Sägewerk, Kaserne, Palisade)
+- [x] Burg ausbauen
+- [x] Einheiten rekrutieren (8 Typen)
+- [x] Armeen bilden
+- [x] Angriff auf Nachbarprovinzen
+- [x] Automatische Schlachtberechnung mit Kampfbericht
+- [x] PostgreSQL-Persistenz
+
+## API-Endpunkte
+
+### Auth
+
+- `POST /api/auth/register` – Registrierung + Königreich gründen
+- `POST /api/auth/login` – Anmeldung
+- `GET /api/auth/me` – Aktueller Benutzer
+
+### Benutzer
+
+- `GET /api/users/profile` – Profil mit Königreich
+- `PATCH /api/users/profile` – Benutzername ändern
+- `PATCH /api/users/password` – Passwort ändern
+
+### Spiel
+
+- `GET /api/game/state` – Kompletter Spielstand
+- `POST /api/game/build` – Gebäude bauen/upgraden
+- `POST /api/game/recruit` – Einheiten rekrutieren
+- `POST /api/game/army` – Armee aus Garnison bilden
+- `POST /api/game/castle/upgrade` – Burg ausbauen
+- `POST /api/game/attack` – Provinz angreifen
+
+## Architektur
+
+Die Spiellogik (Schlachtberechnung, Einheiten- und Gebäudedefinitionen) liegt im `shared/`-Paket und wird sowohl vom Server als auch potenziell vom Client genutzt. Alle Spielzustandsänderungen laufen serverseitig – der Client ist rein darstellend.
+
+Die REST-API ist so strukturiert, dass später WebSockets für Echtzeit-Updates (Schlachten, Diplomatie) ergänzt werden können.
+
+## Lizenz
+
+MIT – siehe [LICENSE](LICENSE)
