@@ -2,7 +2,26 @@
 
 Browserbasiertes Mittelalter-Strategiespiel. Baue dein Königreich aus, führe Dynastien, betreibe Diplomatie und erobere die Welt.
 
-## Tech-Stack
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/Thcjk/handball-scouting-tool?quickstart=1)
+
+## Spiel starten (über GitHub – empfohlen)
+
+Du brauchst **keinen lokalen PC-Setup**. Alles läuft im Browser über GitHub Codespaces:
+
+1. Öffne das Repository auf GitHub
+2. Klicke oben auf den grünen Button **„Code“**
+3. Wähle den Tab **„Codespaces“**
+4. Klicke **„Create codespace on main“**
+5. Warte ca. 2–3 Minuten (Setup läuft automatisch)
+6. Der Browser öffnet automatisch das Spiel unter Port **5173**
+   - Falls nicht: unten in der Leiste auf **„Ports“** klicken → bei Port **5173** auf das Globus-Symbol klicken
+
+Das war's – registriere dich und spiele!
+
+> **Hinweis:** Codespaces ist kostenlos mit monatlichem Kontingent (ca. 60 Std./Monat im Free-Tier). Danach pausiert der Codespace automatisch.
+
+## Lokal starten (optional)
+
 
 | Bereich   | Technologie                                     |
 | --------- | ----------------------------------------------- |
@@ -22,8 +41,6 @@ docs/            Dokumentation
 .github/         CI/CD
 ```
 
-## Schnellstart
-
 ```bash
 npm install
 cp .env.example .env
@@ -35,9 +52,8 @@ npm run dev
 
 - Frontend: http://localhost:5173
 - API: http://localhost:3001/api
-- WebSocket: ws://localhost:3001/game
 
-## Features
+## Tech-Stack
 
 ### Kern (MVP)
 
