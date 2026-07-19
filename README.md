@@ -1,111 +1,77 @@
-# Mittelalterspiel – Browser-Strategiespiel
+# Kronenchronik
 
-Ein browserbasiertes Mittelalter-Strategiespiel, inspiriert von Crusader Kings 3, Mount & Blade: Bannerlord und OpenFront. Spieler bauen Burgen, verwalten Ressourcen, rekrutieren Armeen und erobern Nachbarprovinzen.
+Browserbasiertes Mittelalter-Strategiespiel. Baue dein Königreich aus, führe Dynastien, betreibe Diplomatie und erobere die Welt.
 
 ## Tech-Stack
 
-| Bereich   | Technologie                          |
-| --------- | ------------------------------------ |
-| Frontend  | React, TypeScript, Vite, TailwindCSS |
-| Backend   | Node.js, NestJS, JWT                 |
-| Datenbank | PostgreSQL, Prisma                   |
-| Monorepo  | npm workspaces                       |
+| Bereich   | Technologie                                     |
+| --------- | ----------------------------------------------- |
+| Frontend  | React, TypeScript, Vite, TailwindCSS, Socket.IO |
+| Backend   | Node.js, NestJS, JWT, WebSockets                |
+| Datenbank | PostgreSQL, Prisma                              |
+| Monorepo  | npm workspaces                                  |
 
 ## Projektstruktur
 
 ```
-client/          React-Frontend
-server/          NestJS-Backend (REST-API)
-shared/          Gemeinsame Spiellogik (Schlachten, Einheiten, Gebäude)
+client/          React-Frontend mit Echtzeit-Updates
+server/          NestJS-Backend (REST + WebSockets)
+shared/          Gemeinsame Spiellogik
 database/        Prisma-Schema
 docs/            Dokumentation
-.github/         CI/CD (GitHub Actions)
+.github/         CI/CD
 ```
-
-## Voraussetzungen
-
-- Node.js >= 20
-- PostgreSQL >= 14
-- npm >= 10
 
 ## Schnellstart
 
-### 1. Repository klonen und Abhängigkeiten installieren
-
 ```bash
-git clone <repo-url>
-cd mittelalterspiel
 npm install
-```
-
-### 2. Umgebungsvariablen
-
-```bash
 cp .env.example .env
-# DATABASE_URL und JWT_SECRET anpassen
-```
-
-### 3. Datenbank einrichten
-
-```bash
 npm run db:generate
 npm run db:push
 npm run db:seed
-```
-
-### 4. Entwicklungsserver starten
-
-```bash
 npm run dev
 ```
 
 - Frontend: http://localhost:5173
-- Backend-API: http://localhost:3001/api
+- API: http://localhost:3001/api
+- WebSocket: ws://localhost:3001/game
 
-## MVP-Funktionen
+## Features
 
-- [x] Registrierung und Login (JWT)
-- [x] Profilverwaltung (Benutzername, Passwort)
-- [x] Weltkarte mit 17 Provinzen
-- [x] Startburg und -dorf bei Registrierung
-- [x] Ressourcen (Gold, Nahrung, Holz, Stein, Eisen, Einfluss, Ruhm)
-- [x] Gebäude bauen (Bauernhof, Mine, Sägewerk, Kaserne, Palisade)
-- [x] Burg ausbauen
-- [x] Einheiten rekrutieren (8 Typen)
-- [x] Armeen bilden
-- [x] Angriff auf Nachbarprovinzen
-- [x] Automatische Schlachtberechnung mit Kampfbericht
-- [x] PostgreSQL-Persistenz
+### Kern (MVP)
 
-## API-Endpunkte
+- Registrierung, Login, Profil
+- Weltkarte mit 17 Provinzen
+- Ressourcen, Gebäude, Rekrutierung, Armeen, Schlachten
 
-### Auth
+### Erweitert
 
-- `POST /api/auth/register` – Registrierung + Königreich gründen
-- `POST /api/auth/login` – Anmeldung
-- `GET /api/auth/me` – Aktueller Benutzer
+- **Dynastien:** Herrscher, Erben, Thronfolge bei Tod (Alter/Schlacht)
+- **Diplomatie:** Krieg erklären, Frieden, Bündnisse, Handelsabkommen
+- **Ressourcen-Ticks:** Einkommen alle 30s für aktive Spieler (Gebäude, Unterhalt)
+- **WebSockets:** Echtzeit-Updates für Ressourcen, Schlachten, Diplomatie
+- **Städte:** Gründen, ausbauen, Stadtgebäude (Markt, Rathaus, Tempel …)
 
-### Benutzer
+## API
 
-- `GET /api/users/profile` – Profil mit Königreich
-- `PATCH /api/users/profile` – Benutzername ändern
-- `PATCH /api/users/password` – Passwort ändern
+| Modul     | Endpunkte                                                                                   |
+| --------- | ------------------------------------------------------------------------------------------- |
+| Auth      | `/api/auth/register`, `/login`, `/me`                                                       |
+| Game      | `/api/game/state`, `/build`, `/recruit`, `/army`, `/attack`, `/city/found`, `/city/upgrade` |
+| Dynasty   | `/api/dynasty`                                                                              |
+| Diplomacy | `/api/diplomacy`, `/war`, `/peace`, `/alliance`, `/trade`                                   |
 
-### Spiel
+## WebSocket-Events
 
-- `GET /api/game/state` – Kompletter Spielstand
-- `POST /api/game/build` – Gebäude bauen/upgraden
-- `POST /api/game/recruit` – Einheiten rekrutieren
-- `POST /api/game/army` – Armee aus Garnison bilden
-- `POST /api/game/castle/upgrade` – Burg ausbauen
-- `POST /api/game/attack` – Provinz angreifen
-
-## Architektur
-
-Die Spiellogik (Schlachtberechnung, Einheiten- und Gebäudedefinitionen) liegt im `shared/`-Paket und wird sowohl vom Server als auch potenziell vom Client genutzt. Alle Spielzustandsänderungen laufen serverseitig – der Client ist rein darstellend.
-
-Die REST-API ist so strukturiert, dass später WebSockets für Echtzeit-Updates (Schlachten, Diplomatie) ergänzt werden können.
+| Event             | Beschreibung              |
+| ----------------- | ------------------------- |
+| `gameStateUpdate` | Aktualisierter Spielstand |
+| `resourceTick`    | Ressourcen-Einkommen      |
+| `battleResult`    | Schlachtergebnis          |
+| `succession`      | Thronfolge                |
+| `diplomacyEvent`  | Kriegserklärung etc.      |
 
 ## Lizenz
 
-MIT – siehe [LICENSE](LICENSE)
+MIT

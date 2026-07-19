@@ -10,21 +10,29 @@ export default function Layout() {
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img src="/shield.svg" alt="Wappen" className="w-8 h-8" />
-            <h1 className="text-xl font-bold text-medieval-gold">Mittelalterspiel</h1>
+            <h1 className="text-xl font-bold text-medieval-gold">Kronenchronik</h1>
           </div>
-          <nav className="flex items-center gap-4">
+          <nav className="flex items-center gap-2 sm:gap-4 flex-wrap">
             <NavLink
               to="/game"
               className={({ isActive }) =>
-                `px-3 py-1 rounded transition-colors ${isActive ? 'text-medieval-gold bg-medieval-brown/30' : 'text-gray-300 hover:text-medieval-gold'}`
+                `px-3 py-1 rounded transition-colors text-sm ${isActive ? 'text-medieval-gold bg-medieval-brown/30' : 'text-gray-300 hover:text-medieval-gold'}`
               }
             >
               Weltkarte
             </NavLink>
             <NavLink
+              to="/diplomacy"
+              className={({ isActive }) =>
+                `px-3 py-1 rounded transition-colors text-sm ${isActive ? 'text-medieval-gold bg-medieval-brown/30' : 'text-gray-300 hover:text-medieval-gold'}`
+              }
+            >
+              Diplomatie
+            </NavLink>
+            <NavLink
               to="/profile"
               className={({ isActive }) =>
-                `px-3 py-1 rounded transition-colors ${isActive ? 'text-medieval-gold bg-medieval-brown/30' : 'text-gray-300 hover:text-medieval-gold'}`
+                `px-3 py-1 rounded transition-colors text-sm ${isActive ? 'text-medieval-gold bg-medieval-brown/30' : 'text-gray-300 hover:text-medieval-gold'}`
               }
             >
               Profil

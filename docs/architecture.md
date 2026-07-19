@@ -1,61 +1,55 @@
-# Architektur
+# Architektur – Kronenchronik
 
 ## Übersicht
 
 ```
-┌─────────────┐     REST API      ┌─────────────┐     Prisma     ┌────────────┐
-│   Client    │ ◄──────────────► │   Server    │ ◄────────────► │ PostgreSQL │
-│  (React)    │     JWT Auth      │  (NestJS)   │                │            │
-└─────────────┘                   └──────┬──────┘                └────────────┘
-                                         │
-                                  ┌──────▼──────┐
-                                  │   Shared    │
-                                  │ Spiellogik  │
-                                  └─────────────┘
+┌─────────────┐  REST + WebSocket  ┌─────────────┐     Prisma     ┌────────────┐
+│   Client    │ ◄────────────────► │   Server    │ ◄────────────► │ PostgreSQL │
+│  (React)    │     JWT Auth       │  (NestJS)   │                │            │
+└─────────────┘                    └──────┬──────┘                └────────────┘
+                                          │
+                                   ┌──────▼──────┐
+                                   │   Shared    │
+                                   │ Spiellogik  │
+                                   └─────────────┘
 ```
 
-## Module
+## Server-Module
 
-### shared/
+| Modul | Aufgabe |
+|-------|---------|
+| `auth/` | JWT, Registrierung mit Königreich + Dynastie + Erbe |
+| `users/` | Profilverwaltung |
+| `game/` | Spielzustand, Bau, Rekrutierung, Schlachten, Städte |
+| `dynasty/` | Thronfolge, Charakterverwaltung |
+| `diplomacy/` | Krieg, Frieden, Bündnisse, Handel |
+| `tick/` | Ressourcen-Ticks für aktive Spieler (30s Cron) |
+| `game/game.gateway` | WebSocket-Events |
 
-- **types.ts** – Enums und Interfaces
-- **units.ts** – Einheiten-Definitionen und Kampfwerte
-- **buildings.ts** – Gebäude-Definitionen und Kosten
-- **battle.ts** – Schlachtsimulation (5 Runden, Moral, Gelände, Burg)
-- **resources.ts** – Ressourcen-Hilfsfunktionen
-- **constants.ts** – Weltkarte (17 Provinzen mit Nachbarn)
+## WebSocket-Events
 
-### server/
+- `gameStateUpdate` – nach jeder Spielaktion
+- `resourceTick` – alle 30s für aktive Spieler
+- `battleResult` – nach Schlachten
+- `succession` – bei Herrscher-Tod
+- `diplomacyEvent` – Kriegserklärungen etc.
 
-- **auth/** – JWT-Authentifizierung, Registrierung mit Königreichs-Setup
-- **users/** – Profilverwaltung
-- **game/** – Spielzustand, Bau, Rekrutierung, Schlachten
-- **prisma/** – Datenbankzugriff
+## Dynastie-System
 
-### client/
+- Jeder Spieler startet mit Herrscher + Erbe
+- Herrscher altern (alle 10 Ticks) und können ab Alter 70 sterben
+- 5% Todeschance in verlorenen Schlachten
+- Erbe übernimmt automatisch das Reich
 
-- **pages/** – Login, Register, Game, Profile
-- **components/** – Weltkarte, Provinz-Panel, Ressourcen-Leiste
-- **api/** – Typisierter API-Client
+## Diplomatie
 
-## Datenmodell
+- Angriffe nur bei Kriegserklärung (neutrale Provinzen ausgenommen)
+- Allianzen schützen vor Angriffen
+- Handelsabkommen für Bonus-Einkommen (geplant)
 
-Kernentitäten: User → Kingdom → Province → (Castle, Village, City, Building, Army → Unit)
+## Ressourcen-Ticks
 
-Zusätzlich: Dynasty, Character, Alliance, Battle
-
-## Schlachtsystem
-
-Schlachten werden serverseitig mit `resolveBattle()` berechnet:
-
-1. Bis zu 5 Runden
-2. Faktoren: Truppenstärke, Gelände-Bonus, Burgstufe, Kommandant (martial), Moral, Zufall
-3. Verluste werden proportional auf Einheiten verteilt
-4. Bei Sieg: Provinz wechselt den Besitzer, Armee zieht ein
-
-## Erweiterbarkeit
-
-- WebSocket-Gateway als neues NestJS-Modul (`GameGateway`)
-- Diplomatie-Modul für Allianzen und Kriegserklärungen
-- Tick-System für Ressourcenproduktion (nur bei aktiven Spielern)
-- Dynastie-Erbfolge bei Herrscher-Tod
+Nur Spieler mit `lastSeen` < 2 Min erhalten Ticks:
+- Basiseinkommen + Gebäude-Boni pro Provinz
+- Truppenunterhalt wird abgezogen
+- Stadt-Level gibt Gold- und Einfluss-Bonus

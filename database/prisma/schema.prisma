@@ -1,5 +1,4 @@
-// Prisma schema for Mittelalterspiel
-// The server package uses this schema via symlink/copy
+// Prisma schema for Kronenchronik
 
 generator client {
   provider = "prisma-client-js"
@@ -51,38 +50,49 @@ enum UnitType {
   KNIGHT
 }
 
+enum DiplomaticStatus {
+  NEUTRAL
+  ALLIED
+  AT_WAR
+  TRADE_PACT
+}
+
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
   username  String   @unique
   password  String
+  lastSeen  DateTime @default(now())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   kingdom   Kingdom?
 }
 
 model Kingdom {
-  id         String     @id @default(uuid())
-  name       String
-  userId     String     @unique
-  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  gold       Int        @default(500)
-  food       Int        @default(300)
-  wood       Int        @default(200)
-  stone      Int        @default(150)
-  iron       Int        @default(75)
-  influence  Int        @default(20)
-  fame       Int        @default(0)
-  dynastyId  String?
-  dynasty    Dynasty?   @relation(fields: [dynastyId], references: [id])
-  provinces  Province[]
-  characters Character[]
-  armies     Army[]
-  battlesAttacked Battle[] @relation("AttackerKingdom")
-  battlesDefended Battle[] @relation("DefenderKingdom")
+  id              String     @id @default(uuid())
+  name            String
+  userId          String     @unique
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gold            Int        @default(500)
+  food            Int        @default(300)
+  wood            Int        @default(200)
+  stone           Int        @default(150)
+  iron            Int        @default(75)
+  influence       Int        @default(20)
+  fame            Int        @default(0)
+  lastTickAt      DateTime   @default(now())
+  dynastyId       String?
+  dynasty         Dynasty?   @relation(fields: [dynastyId], references: [id])
+  provinces       Province[]
+  characters      Character[]
+  armies          Army[]
+  battlesAttacked Battle[]   @relation("AttackerKingdom")
+  battlesDefended Battle[]   @relation("DefenderKingdom")
   allianceMembership AllianceMember?
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
+  diplomacyFrom   DiplomaticRelation[] @relation("KingdomA")
+  diplomacyTo     DiplomaticRelation[] @relation("KingdomB")
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 }
 
 model Dynasty {
@@ -95,21 +105,25 @@ model Dynasty {
 }
 
 model Character {
-  id          String   @id @default(uuid())
-  name        String
-  age         Int      @default(25)
-  isAlive     Boolean  @default(true)
-  isRuler     Boolean  @default(true)
-  attack      Int      @default(5)
-  defense     Int      @default(5)
-  diplomacy   Int      @default(5)
-  stewardship Int      @default(5)
-  martial     Int      @default(8)
-  kingdomId   String
-  kingdom     Kingdom  @relation(fields: [kingdomId], references: [id], onDelete: Cascade)
-  dynastyId   String?
-  dynasty     Dynasty? @relation(fields: [dynastyId], references: [id])
-  createdAt   DateTime @default(now())
+  id              String     @id @default(uuid())
+  name            String
+  age             Int        @default(25)
+  isAlive         Boolean    @default(true)
+  isRuler         Boolean    @default(false)
+  isHeir          Boolean    @default(false)
+  attack          Int        @default(5)
+  defense         Int        @default(5)
+  diplomacy       Int        @default(5)
+  stewardship     Int        @default(5)
+  martial         Int        @default(8)
+  kingdomId       String
+  kingdom         Kingdom    @relation(fields: [kingdomId], references: [id], onDelete: Cascade)
+  dynastyId       String?
+  dynasty         Dynasty?   @relation(fields: [dynastyId], references: [id])
+  parentId        String?
+  parent          Character? @relation("Family", fields: [parentId], references: [id])
+  children        Character[] @relation("Family")
+  createdAt       DateTime   @default(now())
 }
 
 model Province {
@@ -224,6 +238,19 @@ model AllianceMember {
   kingdomId  String   @unique
   kingdom    Kingdom  @relation(fields: [kingdomId], references: [id], onDelete: Cascade)
   joinedAt   DateTime @default(now())
+}
+
+model DiplomaticRelation {
+  id          String           @id @default(uuid())
+  kingdomAId  String
+  kingdomBId  String
+  status      DiplomaticStatus @default(NEUTRAL)
+  kingdomA    Kingdom          @relation("KingdomA", fields: [kingdomAId], references: [id], onDelete: Cascade)
+  kingdomB    Kingdom          @relation("KingdomB", fields: [kingdomBId], references: [id], onDelete: Cascade)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([kingdomAId, kingdomBId])
 }
 
 model Battle {

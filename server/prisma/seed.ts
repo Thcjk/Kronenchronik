@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { WORLD_PROVINCES } from '@mittelalterspiel/shared';
+import { WORLD_PROVINCES } from '@kronenchronik/shared';
 
 const prisma = new PrismaClient();
 

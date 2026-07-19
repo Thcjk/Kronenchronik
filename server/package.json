@@ -1,6 +1,6 @@
 {
-  "name": "@mittelalterspiel/server",
-  "version": "0.1.0",
+  "name": "@kronenchronik/server",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
     "build": "nest build",
@@ -14,13 +14,16 @@
     "db:seed": "ts-node prisma/seed.ts"
   },
   "dependencies": {
-    "@mittelalterspiel/shared": "*",
+    "@kronenchronik/shared": "*",
     "@nestjs/common": "^11.1.2",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.1.2",
     "@nestjs/jwt": "^11.0.0",
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.1.2",
+    "@nestjs/platform-socket.io": "^11.1.2",
+    "@nestjs/schedule": "^5.0.1",
+    "@nestjs/websockets": "^11.1.2",
     "@prisma/client": "^6.8.2",
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",
@@ -28,7 +31,8 @@
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "socket.io": "^4.8.1"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.7",

@@ -4,3 +4,7 @@ export * from './battle';
 export * from './resources';
 export * from './units';
 export * from './buildings';
+export * from './diplomacy';
+export * from './city';
+export * from './dynasty';
+export * from './tick';

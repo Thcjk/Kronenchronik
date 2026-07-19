@@ -47,12 +47,9 @@ export const api = {
     }),
 
   getMe: () => request<User>('/auth/me'),
-
   getProfile: () => request<Profile>('/users/profile'),
-
   updateProfile: (data: { username: string }) =>
     request<Profile>('/users/profile', { method: 'PATCH', body: JSON.stringify(data) }),
-
   changePassword: (data: { currentPassword: string; newPassword: string }) =>
     request<{ message: string }>('/users/password', {
       method: 'PATCH',
@@ -60,26 +57,50 @@ export const api = {
     }),
 
   getGameState: () => request<GameState>('/game/state'),
-
   build: (data: { provinceId: string; buildingType: string }) =>
     request<GameState>('/game/build', { method: 'POST', body: JSON.stringify(data) }),
-
   recruit: (data: { provinceId: string; unitType: string; count: number }) =>
     request<GameState>('/game/recruit', { method: 'POST', body: JSON.stringify(data) }),
-
   createArmy: (data: { name: string; provinceId: string }) =>
-    request<{ army: Army; gameState: GameState }>('/game/army', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-
+    request<{ gameState: GameState }>('/game/army', { method: 'POST', body: JSON.stringify(data) }),
   upgradeCastle: (data: { provinceId: string }) =>
     request<GameState>('/game/castle/upgrade', { method: 'POST', body: JSON.stringify(data) }),
-
+  foundCity: (data: { provinceId: string }) =>
+    request<GameState>('/game/city/found', { method: 'POST', body: JSON.stringify(data) }),
+  upgradeCity: (data: { provinceId: string }) =>
+    request<GameState>('/game/city/upgrade', { method: 'POST', body: JSON.stringify(data) }),
   attack: (data: { armyId: string; targetProvinceId: string }) =>
     request<{ battle: Battle; result: BattleResult; gameState: GameState }>('/game/attack', {
       method: 'POST',
       body: JSON.stringify(data),
+    }),
+
+  getDynasty: () => request<DynastyInfo>('/dynasty'),
+  getDiplomacy: () => request<DiplomacyState>('/diplomacy'),
+  declareWar: (targetKingdomId: string) =>
+    request<DiplomacyState>('/diplomacy/war', {
+      method: 'POST',
+      body: JSON.stringify({ targetKingdomId }),
+    }),
+  makePeace: (targetKingdomId: string) =>
+    request<DiplomacyState>('/diplomacy/peace', {
+      method: 'POST',
+      body: JSON.stringify({ targetKingdomId }),
+    }),
+  proposeAlliance: (targetKingdomId: string, allianceName: string) =>
+    request<{ diplomacy: DiplomacyState }>('/diplomacy/alliance', {
+      method: 'POST',
+      body: JSON.stringify({ targetKingdomId, allianceName }),
+    }),
+  joinAlliance: (allianceId: string) =>
+    request<DiplomacyState>('/diplomacy/alliance/join', {
+      method: 'POST',
+      body: JSON.stringify({ allianceId }),
+    }),
+  proposeTrade: (targetKingdomId: string) =>
+    request<DiplomacyState>('/diplomacy/trade', {
+      method: 'POST',
+      body: JSON.stringify({ targetKingdomId }),
     }),
 };
 
@@ -120,6 +141,37 @@ export interface Resources {
   iron: number;
   influence: number;
   fame: number;
+}
+
+export interface Character {
+  id: string;
+  name: string;
+  age: number;
+  isAlive: boolean;
+  isRuler: boolean;
+  isHeir: boolean;
+  martial: number;
+  diplomacy: number;
+  stewardship: number;
+}
+
+export interface DynastyInfo {
+  dynasty: { id: string; name: string; motto: string | null } | null;
+  characters: Character[];
+  ruler: Character | null;
+  heir: Character | null;
+}
+
+export interface DiplomacyState {
+  relations: Array<{
+    id: string;
+    status: string;
+    partner: { id: string; name: string };
+    partnerId: string;
+  }>;
+  kingdoms: Array<{ id: string; name: string; fame: number; user: { username: string } }>;
+  myAlliance: { id: string; name: string; members: Array<{ id: string; name: string }> } | null;
+  availableAlliances: Array<{ id: string; name: string; memberCount: number }>;
 }
 
 export interface Province {
@@ -172,6 +224,7 @@ export interface BattleResult {
 
 export interface GameState {
   kingdom: { id: string; name: string; resources: Resources };
+  dynasty: DynastyInfo;
   provinces: Province[];
   armies: Army[];
   recentBattles: Battle[];

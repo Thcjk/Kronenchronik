@@ -44,3 +44,13 @@ export class UpgradeCastleDto {
   @IsUUID()
   provinceId!: string;
 }
+
+export class FoundCityDto {
+  @IsUUID()
+  provinceId!: string;
+}
+
+export class UpgradeCityDto {
+  @IsUUID()
+  provinceId!: string;
+}

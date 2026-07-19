@@ -1,7 +1,15 @@
 import { Controller, Get, Post, Body, UseGuards, Request } from '@nestjs/common';
 import { GameService } from './game.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { BuildDto, RecruitDto, CreateArmyDto, AttackDto, UpgradeCastleDto } from './dto/game.dto';
+import {
+  BuildDto,
+  RecruitDto,
+  CreateArmyDto,
+  AttackDto,
+  UpgradeCastleDto,
+  FoundCityDto,
+  UpgradeCityDto,
+} from './dto/game.dto';
 
 @Controller('game')
 @UseGuards(JwtAuthGuard)
@@ -31,6 +39,16 @@ export class GameController {
   @Post('castle/upgrade')
   upgradeCastle(@Request() req: { user: { id: string } }, @Body() dto: UpgradeCastleDto) {
     return this.gameService.upgradeCastle(req.user.id, dto);
+  }
+
+  @Post('city/found')
+  foundCity(@Request() req: { user: { id: string } }, @Body() dto: FoundCityDto) {
+    return this.gameService.foundCity(req.user.id, dto);
+  }
+
+  @Post('city/upgrade')
+  upgradeCity(@Request() req: { user: { id: string } }, @Body() dto: UpgradeCityDto) {
+    return this.gameService.upgradeCity(req.user.id, dto);
   }
 
   @Post('attack')

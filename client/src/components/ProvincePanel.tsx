@@ -154,6 +154,24 @@ export default function ProvincePanel({
             Burg ausbauen
           </button>
 
+          {(province.city?.level ?? 0) === 0 ? (
+            <button
+              disabled={loading}
+              onClick={() => handleAction(() => api.foundCity({ provinceId: province.id }))}
+              className="btn-primary w-full text-sm"
+            >
+              🏙️ Stadt gründen
+            </button>
+          ) : (
+            <button
+              disabled={loading}
+              onClick={() => handleAction(() => api.upgradeCity({ provinceId: province.id }))}
+              className="btn-secondary w-full text-sm"
+            >
+              Stadt ausbauen (St. {province.city?.level})
+            </button>
+          )}
+
           <div className="flex gap-2">
             <select
               value={recruitType}
@@ -234,6 +252,34 @@ export default function ProvincePanel({
               </button>
             ))}
           </div>
+
+          {(province.city?.level ?? 0) > 0 && (
+            <div>
+              <h4 className="text-xs text-medieval-light mb-1">Stadtgebäude</h4>
+              <div className="flex flex-wrap gap-1">
+                {(
+                  [
+                    ['MARKET', 'Markt'],
+                    ['SMITHY', 'Schmiede'],
+                    ['TOWN_HALL', 'Rathaus'],
+                    ['TEMPLE', 'Tempel'],
+                    ['CITY_WALL', 'Stadtmauer'],
+                  ] as const
+                ).map(([type, label]) => (
+                  <button
+                    key={type}
+                    disabled={loading}
+                    onClick={() =>
+                      handleAction(() => api.build({ provinceId: province.id, buildingType: type }))
+                    }
+                    className="btn-secondary text-xs"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -3,13 +3,15 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto, LoginDto } from './dto/auth.dto';
-import { STARTING_RESOURCES } from '@mittelalterspiel/shared';
+import { STARTING_RESOURCES } from '@kronenchronik/shared';
+import { DynastyService } from '../dynasty/dynasty.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    private dynastyService: DynastyService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -91,6 +93,13 @@ export class AuthService {
         },
       },
     });
+
+    const ruler = await this.prisma.character.findFirst({
+      where: { kingdomId: user.kingdom!.id, isRuler: true },
+    });
+    if (ruler) {
+      await this.dynastyService.createHeir(user.kingdom!.id, dynasty.id, ruler.id, dto.rulerName);
+    }
 
     const token = this.generateToken(user.id, user.email);
     return { accessToken: token, user: this.sanitizeUser(user) };

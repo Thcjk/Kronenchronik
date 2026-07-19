@@ -3,6 +3,8 @@ import {
   BadRequestException,
   ForbiddenException,
   NotFoundException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -14,15 +16,42 @@ import {
   Terrain,
   UnitType as SharedUnitType,
   BuildingType as SharedBuildingType,
-} from '@mittelalterspiel/shared';
-import { BuildDto, RecruitDto, CreateArmyDto, AttackDto, UpgradeCastleDto } from './dto/game.dto';
+  CITY_FOUND_COST,
+  CITY_FOUND_REQUIREMENTS,
+  CITY_UPGRADE_COST_PER_LEVEL,
+  MAX_CITY_LEVEL,
+  getCityBuildingMinLevel,
+} from '@kronenchronik/shared';
+import {
+  BuildDto,
+  RecruitDto,
+  CreateArmyDto,
+  AttackDto,
+  UpgradeCastleDto,
+  FoundCityDto,
+  UpgradeCityDto,
+} from './dto/game.dto';
 import { UnitType } from '@prisma/client';
+import { DynastyService } from '../dynasty/dynasty.service';
+import { DiplomacyService } from '../diplomacy/diplomacy.service';
+import { GameGateway } from './game.gateway';
 
 @Injectable()
 export class GameService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private dynastyService: DynastyService,
+    @Inject(forwardRef(() => DiplomacyService))
+    private diplomacyService: DiplomacyService,
+    private gameGateway: GameGateway,
+  ) {}
 
   async getGameState(userId: string) {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { lastSeen: new Date() },
+    });
+
     const kingdom = await this.getKingdomByUser(userId);
     const provinces = await this.prisma.province.findMany({
       include: {
@@ -53,6 +82,8 @@ export class GameService {
       },
     });
 
+    const dynasty = await this.dynastyService.getDynastyInfo(kingdom.id);
+
     return {
       kingdom: {
         id: kingdom.id,
@@ -67,6 +98,7 @@ export class GameService {
           fame: kingdom.fame,
         },
       },
+      dynasty,
       provinces: provinces.map((p) => ({
         id: p.id,
         slug: p.slug,
@@ -98,6 +130,11 @@ export class GameService {
 
     const buildingDef = BUILDING_DEFINITIONS[dto.buildingType as SharedBuildingType];
     if (!buildingDef) throw new BadRequestException('Unbekannter Gebäudetyp');
+
+    const minCityLevel = getCityBuildingMinLevel(buildingDef.category);
+    if (minCityLevel > 0 && (province.city?.level ?? 0) < minCityLevel) {
+      throw new BadRequestException('Stadt muss zuerst gegründet werden für dieses Gebäude');
+    }
 
     const existing = await this.prisma.building.findUnique({
       where: { provinceId_type: { provinceId: dto.provinceId, type: dto.buildingType } },
@@ -151,7 +188,114 @@ export class GameService {
       });
     }
 
-    return this.getGameState(userId);
+    return this.emitState(userId);
+  }
+
+  async foundCity(userId: string, dto: FoundCityDto) {
+    const kingdom = await this.getKingdomByUser(userId);
+    const province = await this.assertProvinceOwnership(kingdom.id, dto.provinceId);
+
+    if (!province.village || province.village.level < CITY_FOUND_REQUIREMENTS.minVillageLevel) {
+      throw new BadRequestException(
+        `Dorf muss mindestens Stufe ${CITY_FOUND_REQUIREMENTS.minVillageLevel} sein`,
+      );
+    }
+    if (province.population < CITY_FOUND_REQUIREMENTS.minPopulation) {
+      throw new BadRequestException(
+        `Mindestens ${CITY_FOUND_REQUIREMENTS.minPopulation} Bevölkerung erforderlich`,
+      );
+    }
+    if (province.prosperity < CITY_FOUND_REQUIREMENTS.minProsperity) {
+      throw new BadRequestException(
+        `Mindestens ${CITY_FOUND_REQUIREMENTS.minProsperity} Wohlstand erforderlich`,
+      );
+    }
+    if (province.city && province.city.level > 0) {
+      throw new BadRequestException('Stadt bereits gegründet');
+    }
+
+    const resources = this.kingdomResources(kingdom);
+    if (!canAfford(resources, CITY_FOUND_COST)) {
+      throw new BadRequestException('Nicht genügend Ressourcen');
+    }
+
+    const updated = subtractResources(resources, CITY_FOUND_COST);
+
+    await this.prisma.$transaction([
+      this.prisma.kingdom.update({
+        where: { id: kingdom.id },
+        data: {
+          gold: updated.gold,
+          food: updated.food,
+          wood: updated.wood,
+          stone: updated.stone,
+          iron: updated.iron,
+          fame: { increment: 5 },
+        },
+      }),
+      this.prisma.city.update({
+        where: { id: province.city!.id },
+        data: { level: 1 },
+      }),
+      this.prisma.province.update({
+        where: { id: province.id },
+        data: { prosperity: { increment: 15 }, population: { increment: 500 } },
+      }),
+    ]);
+
+    return this.emitState(userId);
+  }
+
+  async upgradeCity(userId: string, dto: UpgradeCityDto) {
+    const kingdom = await this.getKingdomByUser(userId);
+    const province = await this.assertProvinceOwnership(kingdom.id, dto.provinceId);
+
+    if (!province.city || province.city.level === 0) {
+      throw new BadRequestException('Keine Stadt in dieser Provinz');
+    }
+
+    const nextLevel = province.city.level + 1;
+    if (nextLevel > MAX_CITY_LEVEL) {
+      throw new BadRequestException('Maximale Stadtstufe erreicht');
+    }
+
+    const cost = {
+      gold: CITY_UPGRADE_COST_PER_LEVEL.gold * nextLevel,
+      food: CITY_UPGRADE_COST_PER_LEVEL.food * nextLevel,
+      wood: CITY_UPGRADE_COST_PER_LEVEL.wood * nextLevel,
+      stone: CITY_UPGRADE_COST_PER_LEVEL.stone * nextLevel,
+      iron: CITY_UPGRADE_COST_PER_LEVEL.iron * nextLevel,
+    };
+
+    const resources = this.kingdomResources(kingdom);
+    if (!canAfford(resources, cost)) {
+      throw new BadRequestException('Nicht genügend Ressourcen');
+    }
+
+    const updated = subtractResources(resources, cost);
+
+    await this.prisma.$transaction([
+      this.prisma.kingdom.update({
+        where: { id: kingdom.id },
+        data: {
+          gold: updated.gold,
+          food: updated.food,
+          wood: updated.wood,
+          stone: updated.stone,
+          iron: updated.iron,
+        },
+      }),
+      this.prisma.city.update({
+        where: { id: province.city.id },
+        data: { level: nextLevel },
+      }),
+      this.prisma.province.update({
+        where: { id: province.id },
+        data: { prosperity: { increment: 10 } },
+      }),
+    ]);
+
+    return this.emitState(userId);
   }
 
   async recruitUnits(userId: string, dto: RecruitDto) {
@@ -214,7 +358,7 @@ export class GameService {
           }),
     ]);
 
-    return this.getGameState(userId);
+    return this.emitState(userId);
   }
 
   async createArmy(userId: string, dto: CreateArmyDto) {
@@ -230,7 +374,7 @@ export class GameService {
       throw new BadRequestException('Keine Truppen in der Garnison verfügbar');
     }
 
-    const army = await this.prisma.army.create({
+    await this.prisma.army.create({
       data: {
         name: dto.name,
         kingdomId: kingdom.id,
@@ -243,7 +387,6 @@ export class GameService {
           })),
         },
       },
-      include: { units: true },
     });
 
     for (const unit of garrison.units) {
@@ -254,7 +397,8 @@ export class GameService {
       });
     }
 
-    return { army, gameState: await this.getGameState(userId) };
+    const state = await this.emitState(userId);
+    return { gameState: state };
   }
 
   async upgradeCastle(userId: string, dto: UpgradeCastleDto) {
@@ -302,7 +446,7 @@ export class GameService {
       }),
     ]);
 
-    return this.getGameState(userId);
+    return this.emitState(userId);
   }
 
   async attackProvince(userId: string, dto: AttackDto) {
@@ -327,6 +471,7 @@ export class GameService {
         kingdom: true,
         castle: true,
         village: true,
+        city: true,
         armies: { include: { units: true } },
         neighbors: { include: { neighbor: true } },
       },
@@ -344,6 +489,11 @@ export class GameService {
 
     if (target.kingdomId === kingdom.id) {
       throw new BadRequestException('Eigene Provinzen können nicht angegriffen werden');
+    }
+
+    const warCheck = await this.diplomacyService.canAttack(kingdom.id, target.kingdomId);
+    if (!warCheck.allowed) {
+      throw new ForbiddenException(warCheck.reason);
     }
 
     const ruler = await this.prisma.character.findFirst({
@@ -384,6 +534,14 @@ export class GameService {
       await this.applyBattleCasualties(defArmy.id, defArmy.units, battleResult.defenderCasualties);
     }
 
+    let successionResult = null;
+    if (ruler && !battleResult.attackerWon) {
+      successionResult = await this.dynastyService.checkBattleDeath(kingdom.id, ruler.id);
+    }
+    if (defenderRuler && battleResult.attackerWon && target.kingdomId) {
+      await this.dynastyService.checkBattleDeath(target.kingdomId, defenderRuler.id);
+    }
+
     if (battleResult.attackerWon) {
       await this.prisma.province.update({
         where: { id: target.id },
@@ -395,27 +553,19 @@ export class GameService {
         data: { provinceId: target.id },
       });
 
-      if (target.kingdomId) {
-        await this.prisma.kingdom.update({
-          where: { id: kingdom.id },
-          data: { fame: { increment: 10 } },
-        });
-      } else {
-        await this.prisma.kingdom.update({
-          where: { id: kingdom.id },
-          data: { fame: { increment: 5 } },
-        });
+      await this.prisma.kingdom.update({
+        where: { id: kingdom.id },
+        data: { fame: { increment: target.kingdomId ? 10 : 5 } },
+      });
 
-        if (!target.castle) {
-          await this.prisma.castle.create({
-            data: { provinceId: target.id, level: 1 },
-          });
-        }
-        if (!target.village) {
-          await this.prisma.village.create({
-            data: { provinceId: target.id, level: 1 },
-          });
-        }
+      if (!target.castle) {
+        await this.prisma.castle.create({ data: { provinceId: target.id, level: 1 } });
+      }
+      if (!target.village) {
+        await this.prisma.village.create({ data: { provinceId: target.id, level: 1 } });
+      }
+      if (!target.city) {
+        await this.prisma.city.create({ data: { provinceId: target.id, level: 0 } });
       }
     }
 
@@ -429,7 +579,20 @@ export class GameService {
       },
     });
 
-    return { battle, result: battleResult, gameState: await this.getGameState(userId) };
+    const gameState = await this.emitState(userId);
+    this.gameGateway.emitToUser(userId, 'battleResult', {
+      battle,
+      result: battleResult,
+      successionResult,
+    });
+
+    return { battle, result: battleResult, successionResult, gameState };
+  }
+
+  private async emitState(userId: string) {
+    const state = await this.getGameState(userId);
+    this.gameGateway.emitGameStateUpdate(userId, state);
+    return state;
   }
 
   private async applyBattleCasualties(

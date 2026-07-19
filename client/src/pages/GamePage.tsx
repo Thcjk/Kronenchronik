@@ -1,34 +1,64 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { api, type GameState, type Province, type BattleResult } from '../api/client';
+import { useGameSocket } from '../hooks/useGameSocket';
 import ResourceBar from '../components/ResourceBar';
 import WorldMap from '../components/WorldMap';
 import ProvincePanel from '../components/ProvincePanel';
+import DynastyPanel from '../components/DynastyPanel';
 
 export default function GamePage() {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [selectedProvince, setSelectedProvince] = useState<Province | null>(null);
   const [battleResult, setBattleResult] = useState<BattleResult | null>(null);
+  const [successionMsg, setSuccessionMsg] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    loadGame();
-  }, []);
-
-  const loadGame = async () => {
+  const loadGame = useCallback(async () => {
     try {
       const state = await api.getGameState();
       setGameState(state);
-      if (!selectedProvince && state.provinces.length > 0) {
-        const owned = state.provinces.find((p) => p.isOwned);
-        if (owned) setSelectedProvince(owned);
-      }
+      setSelectedProvince((prev) => {
+        if (prev) return state.provinces.find((p) => p.id === prev.id) ?? prev;
+        return state.provinces.find((p) => p.isOwned) ?? null;
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Spielstand konnte nicht geladen werden');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadGame();
+  }, [loadGame]);
+
+  useGameSocket({
+    onGameStateUpdate: (state) => setGameState(state),
+    onBattleResult: (data) => {
+      setBattleResult(data.result);
+      if (data.successionResult) {
+        const s = data.successionResult as { newRulerName: string };
+        setSuccessionMsg(`Thronfolge: ${s.newRulerName} ist neuer Herrscher!`);
+      }
+    },
+    onResourceTick: (data) => {
+      setGameState((prev) =>
+        prev ? { ...prev, kingdom: { ...prev.kingdom, resources: data.resources } } : prev,
+      );
+    },
+    onSuccession: (data) => {
+      const s = data as { newRulerName: string };
+      setSuccessionMsg(`Thronfolge: ${s.newRulerName} ist neuer Herrscher!`);
+      loadGame();
+    },
+    onDiplomacyEvent: (data) => {
+      const e = data as { type: string; from: string };
+      if (e.type === 'war_declared') {
+        setSuccessionMsg(`⚠️ ${e.from} hat dir den Krieg erklärt!`);
+      }
+    },
+  });
 
   const handleSelect = (province: Province) => {
     setSelectedProvince(province);
@@ -62,6 +92,15 @@ export default function GamePage() {
         </div>
       </div>
 
+      {successionMsg && (
+        <div className="card border-2 border-medieval-gold">
+          <p className="text-medieval-gold">{successionMsg}</p>
+          <button onClick={() => setSuccessionMsg('')} className="btn-secondary text-xs mt-2">
+            Schließen
+          </button>
+        </div>
+      )}
+
       {battleResult && (
         <div
           className={`card border-2 ${battleResult.attackerWon ? 'border-medieval-gold' : 'border-medieval-red'}`}
@@ -82,12 +121,13 @@ export default function GamePage() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 space-y-4">
           <WorldMap
             provinces={gameState.provinces}
             selectedId={selectedProvince?.id ?? null}
             onSelect={handleSelect}
           />
+          {gameState.dynasty && <DynastyPanel dynasty={gameState.dynasty} />}
         </div>
         <div>
           {selectedProvince ? (

@@ -1,9 +1,9 @@
 {
-  "name": "mittelalterspiel",
+  "name": "kronenchronik",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Browser-based medieval strategy game monorepo",
+  "description": "Kronenchronik – Browser-based medieval strategy game monorepo",
   "workspaces": [
     "client",
     "server",
