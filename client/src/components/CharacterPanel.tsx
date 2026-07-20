@@ -1,4 +1,5 @@
 import type { DynastyInfo } from '../api/client';
+import { coatFromName } from '../lore/intro';
 
 const TRAIT_LABELS: Record<string, string> = {
   mutig: 'Mutig',
@@ -19,18 +20,20 @@ interface Props {
   dynasty: DynastyInfo;
   compact?: boolean;
   onClose?: () => void;
+  kingdomName?: string;
 }
 
-export default function CharacterPanel({ dynasty, compact, onClose }: Props) {
+export default function CharacterPanel({ dynasty, compact, onClose, kingdomName }: Props) {
   const ruler = dynasty.ruler;
   if (!ruler) return null;
 
+  const dynName = dynasty.dynasty?.name ?? `Haus ${ruler.name}`;
+  const coat = coatFromName(dynName);
+
   return (
-    <div className="panel p-3">
+    <div className="panel parchment-frame p-3">
       <div className="flex items-start justify-between gap-2 mb-2">
-        <div className="panel-header !mb-0 !pb-0 !border-0 flex-1">
-          {dynasty.dynasty?.name ?? 'Dynastie'}
-        </div>
+        <div className="panel-header !mb-0 !pb-0 !border-0 flex-1">{dynName}</div>
         {onClose && (
           <button type="button" onClick={onClose} className="btn-secondary text-[10px] py-0.5 px-1.5">
             ✕
@@ -39,18 +42,29 @@ export default function CharacterPanel({ dynasty, compact, onClose }: Props) {
       </div>
 
       <div className="flex gap-3">
-        <div className="portrait-frame" title={ruler.name}>
-          👑
+        <div className="flex flex-col items-center gap-1.5">
+          <div className="portrait-frame portrait-frame-lg" title={ruler.name}>
+            👑
+          </div>
+          <div
+            className="coat-of-arms coat-sm"
+            style={{ background: `linear-gradient(145deg, ${coat.primary}, ${coat.secondary})` }}
+            title="Wappen"
+          >
+            <span>{coat.emblem}</span>
+          </div>
         </div>
         <div className="min-w-0 flex-1">
-          <div className="font-display text-gold text-sm leading-tight">{ruler.name}</div>
-          <div className="text-[11px] text-parchment/60 mt-0.5">
-            Herrscher · {ruler.age} Jahre
-            {ruler.gender === 'FEMALE' ? ' · Weiblich' : ' · Männlich'}
+          <div className="font-display text-gold text-base leading-tight">{ruler.name}</div>
+          <div className="text-[11px] text-parchment/70 mt-0.5">
+            Graf von {kingdomName ?? 'der Grenze'} · {ruler.age} Jahre
           </div>
           {dynasty.dynasty?.motto && (
-            <div className="text-[10px] italic text-parchment/50 mt-1">„{dynasty.dynasty.motto}"</div>
+            <div className="text-[10px] italic text-gold/70 mt-1">„{dynasty.dynasty.motto}"</div>
           )}
+          <div className="text-[10px] text-parchment/50 mt-1">
+            Prestige {ruler.prestige ?? 0} · Einfluss —
+          </div>
           {ruler.traits && ruler.traits.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-2">
               {ruler.traits.map((t) => (
@@ -80,34 +94,30 @@ export default function CharacterPanel({ dynasty, compact, onClose }: Props) {
           <span>🕵️ Intrige</span>
           <span className="text-gold">{ruler.intrigue ?? 5}</span>
         </div>
-        {(ruler.health !== undefined || ruler.prestige !== undefined) && (
-          <div className="stat-row">
-            <span>❤️ Gesundheit / Prestige</span>
-            <span className="text-gold">
-              {ruler.health ?? 100} / {ruler.prestige ?? 0}
-            </span>
-          </div>
-        )}
+        <div className="stat-row">
+          <span>❤️ Gesundheit</span>
+          <span className="text-gold">{ruler.health ?? 100}</span>
+        </div>
       </div>
 
-      {dynasty.heir && !compact && (
+      {dynasty.heir && (
         <div className="mt-3 pt-2 border-t border-gold/20">
-          <div className="text-[10px] text-parchment/50 font-display mb-1">Erbe</div>
-          <div className="flex items-center gap-2">
-            <div className="portrait-frame !w-10 !h-12 !text-base">🎖️</div>
-            <div>
-              <div className="text-sm font-display">{dynasty.heir.name}</div>
-              <div className="text-[10px] text-parchment/50">
-                {dynasty.heir.age} Jahre · Krieg {dynasty.heir.martial}
+          <div className="text-[10px] text-parchment/50 font-display mb-1">Familie · Erbe</div>
+          {compact ? (
+            <div className="text-[11px] text-parchment/70">
+              {dynasty.heir.name} ({dynasty.heir.age})
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <div className="portrait-frame !w-10 !h-12 !text-base">🎖️</div>
+              <div>
+                <div className="text-sm font-display">{dynasty.heir.name}</div>
+                <div className="text-[10px] text-parchment/50">
+                  {dynasty.heir.age} Jahre · Krieg {dynasty.heir.martial}
+                </div>
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {dynasty.heir && compact && (
-        <div className="mt-2 text-[11px] text-parchment/60">
-          Erbe: <span className="text-parchment">{dynasty.heir.name}</span> ({dynasty.heir.age})
+          )}
         </div>
       )}
     </div>

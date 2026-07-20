@@ -34,6 +34,7 @@ import type {
   DiplomacyState,
   Battle,
 } from '../api/client';
+import { mottoFromName } from '../lore/intro';
 
 const USERS_KEY = 'kronenchronik_users';
 const SESSION_KEY = 'kronenchronik_session';
@@ -248,8 +249,8 @@ function createNewSave(kingdomName: string, rulerName: string): GameSave {
     provinces,
     armies,
     battles: [],
-    dynasty: {
-      dynasty: { id: dynastyId, name: `Haus ${rulerName}`, motto: 'Stärke durch Ehre' },
+      dynasty: {
+      dynasty: { id: dynastyId, name: `Haus ${rulerName}`, motto: mottoFromName(rulerName) },
       characters: [
         {
           id: rulerId,

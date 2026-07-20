@@ -5,8 +5,18 @@ import {
   provinceCenter,
   mapBounds,
   TERRAIN_FILL,
+  TERRAIN_FILL_ALT,
   REALM_COLORS,
   RIVER_PATHS,
+  LAKE_ELLIPSES,
+  zoomLod,
+  castleVisual,
+  settlementVisual,
+  buildAmbientActors,
+  buildRoadSegments,
+  nearDecor,
+  hash,
+  nameSeed,
 } from '../map/geometry';
 
 interface WorldMapProps {
@@ -17,6 +27,17 @@ interface WorldMapProps {
   mapMode?: 'terrain' | 'political';
 }
 
+const AMBIENT_GLYPH: Record<string, string> = {
+  peasant: '🧑‍🌾',
+  merchant: '🛒',
+  soldier: '🗡️',
+  sheep: '🐑',
+  smoke: '💨',
+  flag: '🚩',
+  boat: '⛵',
+  hunter: '🏹',
+};
+
 export default function WorldMap({
   provinces,
   armies,
@@ -24,7 +45,7 @@ export default function WorldMap({
   onSelect,
   mapMode = 'political',
 }: WorldMapProps) {
-  const [transform, setTransform] = useState({ x: 10, y: 10, scale: 0.85 });
+  const [transform, setTransform] = useState({ x: 24, y: 16, scale: 0.9 });
   const dragging = useRef(false);
   const lastPos = useRef({ x: 0, y: 0 });
   const moved = useRef(false);
@@ -32,6 +53,7 @@ export default function WorldMap({
   const maxX = Math.max(...provinces.map((p) => p.x), 0);
   const maxY = Math.max(...provinces.map((p) => p.y), 0);
   const { width, height } = mapBounds(maxX, maxY);
+  const lod = zoomLod(transform.scale);
 
   const ownerIds = useMemo(
     () => [...new Set(provinces.map((p) => p.ownerId).filter(Boolean))] as string[],
@@ -41,10 +63,25 @@ export default function WorldMap({
   const ownerColor = useCallback(
     (ownerId: string | null) => {
       if (!ownerId) return '#4a5560';
-      const idx = ownerIds.indexOf(ownerId);
-      return REALM_COLORS[idx % REALM_COLORS.length];
+      return REALM_COLORS[ownerIds.indexOf(ownerId) % REALM_COLORS.length];
     },
     [ownerIds],
+  );
+
+  const roads = useMemo(() => buildRoadSegments(provinces), [provinces]);
+  const ambient = useMemo(
+    () =>
+      buildAmbientActors(
+        provinces.map((p) => ({
+          id: p.id,
+          name: p.name,
+          x: p.x,
+          y: p.y,
+          terrain: p.terrain,
+          isOwned: p.isOwned,
+        })),
+      ),
+    [provinces],
   );
 
   const onWheel = (e: React.WheelEvent) => {
@@ -52,7 +89,7 @@ export default function WorldMap({
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
     setTransform((t) => ({
       ...t,
-      scale: Math.min(2.8, Math.max(0.35, t.scale * delta)),
+      scale: Math.min(3.2, Math.max(0.35, t.scale * delta)),
     }));
   };
 
@@ -80,29 +117,16 @@ export default function WorldMap({
 
   return (
     <div className="world-map-shell relative w-full h-full overflow-hidden">
-      {/* Steuerungsleiste */}
+      <div className="absolute top-2 left-2 z-20 panel px-2 py-1 text-[10px] text-parchment/70 pointer-events-none">
+        {lod === 'far' && 'Reichsübersicht'}
+        {lod === 'mid' && 'Provinzen & Straßen'}
+        {lod === 'near' && 'Nahsicht – Felder & Leben'}
+      </div>
+
       <div className="absolute top-2 right-2 z-20 flex gap-1">
-        <button
-          type="button"
-          className="map-ctrl"
-          onClick={() => setTransform((t) => ({ ...t, scale: Math.min(2.8, t.scale * 1.2) }))}
-        >
-          +
-        </button>
-        <button
-          type="button"
-          className="map-ctrl"
-          onClick={() => setTransform((t) => ({ ...t, scale: Math.max(0.35, t.scale * 0.8) }))}
-        >
-          −
-        </button>
-        <button
-          type="button"
-          className="map-ctrl"
-          onClick={() => setTransform({ x: 10, y: 10, scale: 0.85 })}
-        >
-          ⌂
-        </button>
+        <button type="button" className="map-ctrl" onClick={() => setTransform((t) => ({ ...t, scale: Math.min(3.2, t.scale * 1.2) }))}>+</button>
+        <button type="button" className="map-ctrl" onClick={() => setTransform((t) => ({ ...t, scale: Math.max(0.35, t.scale * 0.8) }))}>−</button>
+        <button type="button" className="map-ctrl" onClick={() => setTransform({ x: 24, y: 16, scale: 0.9 })}>⌂</button>
       </div>
 
       <div
@@ -115,52 +139,105 @@ export default function WorldMap({
       >
         <svg className="w-full h-full" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet">
           <defs>
-            <radialGradient id="mapBg" cx="50%" cy="40%" r="70%">
-              <stop offset="0%" stopColor="#1a2a1f" />
-              <stop offset="100%" stopColor="#0c1210" />
+            <radialGradient id="mapBg" cx="45%" cy="35%" r="75%">
+              <stop offset="0%" stopColor="#243528" />
+              <stop offset="55%" stopColor="#121a14" />
+              <stop offset="100%" stopColor="#0a0e0c" />
             </radialGradient>
-            <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
-              <feDropShadow dx="0" dy="2" stdDeviation="2" floodOpacity="0.45" />
+            <filter id="softShadow">
+              <feDropShadow dx="0" dy="2" stdDeviation="2.5" floodOpacity="0.5" />
             </filter>
-            <pattern id="forestDots" width="8" height="8" patternUnits="userSpaceOnUse">
-              <circle cx="2" cy="2" r="1.2" fill="#0f2a18" opacity="0.5" />
-              <circle cx="6" cy="5" r="1" fill="#0f2a18" opacity="0.35" />
+            <pattern id="forestDots" width="10" height="10" patternUnits="userSpaceOnUse">
+              <circle cx="2" cy="3" r="1.4" fill="#0c2414" opacity="0.55" />
+              <circle cx="7" cy="7" r="1.1" fill="#0c2414" opacity="0.4" />
             </pattern>
-            <pattern id="mountainHatch" width="6" height="6" patternUnits="userSpaceOnUse">
-              <path d="M0 6 L6 0" stroke="#3a3a3a" strokeWidth="0.8" opacity="0.4" />
+            <pattern id="mountainHatch" width="7" height="7" patternUnits="userSpaceOnUse">
+              <path d="M0 7 L7 0" stroke="#3a3a42" strokeWidth="0.9" opacity="0.45" />
             </pattern>
+            <pattern id="swampRipple" width="12" height="8" patternUnits="userSpaceOnUse">
+              <path d="M0 4 Q3 2 6 4 T12 4" fill="none" stroke="#2a4a3a" strokeWidth="0.6" opacity="0.35" />
+            </pattern>
+            <linearGradient id="roadGrad" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="#8a7040" stopOpacity="0.35" />
+              <stop offset="50%" stopColor="#c4a882" stopOpacity="0.75" />
+              <stop offset="100%" stopColor="#8a7040" stopOpacity="0.35" />
+            </linearGradient>
           </defs>
 
           <rect width={width} height={height} fill="url(#mapBg)" />
 
           <g transform={`translate(${transform.x},${transform.y}) scale(${transform.scale})`}>
+            {/* Seen */}
+            {lod !== 'far' &&
+              LAKE_ELLIPSES.map((l, i) => (
+                <ellipse
+                  key={i}
+                  cx={l.cx}
+                  cy={l.cy}
+                  rx={l.rx}
+                  ry={l.ry}
+                  fill="#2a5a72"
+                  opacity={0.65}
+                  stroke="#4a8aaa"
+                  strokeWidth={1}
+                />
+              ))}
+
             {/* Flüsse */}
             {RIVER_PATHS.map((d, i) => (
-              <path
-                key={i}
-                d={d}
-                fill="none"
-                stroke="#3a7a9a"
-                strokeWidth={4}
-                strokeOpacity={0.55}
-                strokeLinecap="round"
-              />
+              <g key={i}>
+                <path d={d} fill="none" stroke="#1a4058" strokeWidth={lod === 'far' ? 5 : 7} strokeLinecap="round" opacity={0.35} />
+                <path d={d} fill="none" stroke="#3a8aaa" strokeWidth={lod === 'far' ? 2.5 : 3.5} strokeLinecap="round" opacity={0.7} />
+              </g>
             ))}
+
+            {/* Straßen (mid+) */}
+            {lod !== 'far' &&
+              roads.map((r) => (
+                <line
+                  key={r.key}
+                  x1={r.x1}
+                  y1={r.y1}
+                  x2={r.x2}
+                  y2={r.y2}
+                  stroke="url(#roadGrad)"
+                  strokeWidth={lod === 'near' ? 3.5 : 2.2}
+                  strokeLinecap="round"
+                  strokeDasharray={lod === 'near' ? undefined : '6 4'}
+                  opacity={0.85}
+                />
+              ))}
+
+            {/* Brücken-Marken an Fluss-Kreuzungen (dekorativ) */}
+            {lod === 'near' &&
+              [
+                [160, 210],
+                [350, 220],
+                [280, 370],
+              ].map(([bx, by], i) => (
+                <rect key={i} x={bx - 6} y={by - 3} width={12} height={6} rx={1} fill="#6a5438" stroke="#c4a882" strokeWidth={0.5} />
+              ))}
 
             {/* Provinzen */}
             {provinces.map((p) => {
               const poly = provincePolygon(p.x, p.y, p.name);
               const { cx, cy } = provinceCenter(p.x, p.y);
               const isSelected = selectedId === p.id;
-              const fill =
+              const seed = nameSeed(p.name);
+              const baseFill =
                 mapMode === 'political' && p.ownerId
                   ? ownerColor(p.ownerId)
-                  : TERRAIN_FILL[p.terrain] ?? '#445';
-              const border = p.isOwned
-                ? '#f0d060'
-                : p.ownerId
-                  ? ownerColor(p.ownerId)
-                  : '#2a3035';
+                  : hash(seed) > 0.5
+                    ? TERRAIN_FILL[p.terrain]
+                    : TERRAIN_FILL_ALT[p.terrain];
+              const border = p.isOwned ? '#f0d060' : p.ownerId ? ownerColor(p.ownerId) : '#2a3035';
+
+              const cityLv = p.city?.level ?? 0;
+              const villLv = p.village?.level ?? 0;
+              const castLv = p.castle?.level ?? 0;
+              const bCount = p.cityGrid?.filter((t) => t.kind !== 'EMPTY' && t.kind !== 'ROAD').length ?? p.buildings?.length ?? 0;
+              const settle = settlementVisual(cityLv, villLv, bCount);
+              const castle = castLv > 0 ? castleVisual(castLv) : null;
 
               const fieldTroops = (p.armies ?? [])
                 .filter((a) => !a.isGarrison)
@@ -177,49 +254,82 @@ export default function WorldMap({
                 >
                   <polygon
                     points={poly}
-                    fill={fill}
-                    fillOpacity={mapMode === 'political' && p.ownerId ? 0.72 : 0.88}
+                    fill={baseFill}
+                    fillOpacity={mapMode === 'political' && p.ownerId ? 0.68 : 0.9}
                     stroke={isSelected ? '#f5e6a3' : border}
-                    strokeWidth={isSelected ? 3.5 : p.isOwned ? 2.5 : 1.2}
+                    strokeWidth={isSelected ? 3.5 : p.isOwned ? 2.4 : 1.1}
                     filter={isSelected ? 'url(#softShadow)' : undefined}
                   />
                   {p.terrain === 'FOREST' && (
-                    <polygon points={poly} fill="url(#forestDots)" opacity={0.6} pointerEvents="none" />
+                    <polygon points={poly} fill="url(#forestDots)" opacity={0.55} pointerEvents="none" />
                   )}
                   {p.terrain === 'MOUNTAINS' && (
                     <polygon points={poly} fill="url(#mountainHatch)" opacity={0.5} pointerEvents="none" />
                   )}
+                  {/* Sumpf-Optik für manche Wälder (Variation) */}
+                  {p.terrain === 'FOREST' && hash(seed + 2) > 0.7 && lod !== 'far' && (
+                    <polygon points={poly} fill="url(#swampRipple)" opacity={0.4} pointerEvents="none" />
+                  )}
 
-                  {/* Siedlungs-Icon */}
-                  {p.castle && (
-                    <text x={cx} y={cy - 14} textAnchor="middle" fontSize={14} className="map-icon">
-                      🏰
+                  {/* Nah: Dekor */}
+                  {lod === 'near' &&
+                    nearDecor(p.name, p.x, p.y, p.terrain).map((d, i) => (
+                      <text key={i} x={d.px} y={d.py} fontSize={9} opacity={0.75} pointerEvents="none">
+                        {d.glyph}
+                      </text>
+                    ))}
+
+                  {/* Siedlung / Burg */}
+                  {lod !== 'far' && castle && (
+                    <text
+                      x={cx - (cityLv > 0 ? 12 : 0)}
+                      y={cy - 12}
+                      textAnchor="middle"
+                      fontSize={castle.size}
+                      className="map-icon"
+                    >
+                      {castle.icon}
                     </text>
                   )}
-                  {p.city && p.city.level > 0 && !p.castle && (
-                    <text x={cx} y={cy - 14} textAnchor="middle" fontSize={12} className="map-icon">
-                      🏙️
+                  {lod !== 'far' && (cityLv > 0 || villLv > 0) && (
+                    <text
+                      x={cx + (castle ? 14 : 0)}
+                      y={cy - 10}
+                      textAnchor="middle"
+                      fontSize={settle.size}
+                      className="map-icon"
+                    >
+                      {settle.icon}
+                    </text>
+                  )}
+
+                  {/* Rauch bei Städten */}
+                  {lod === 'near' && cityLv > 0 && (
+                    <text x={cx + 8} y={cy - 28} fontSize={10} className="map-smoke" opacity={0.7}>
+                      💨
                     </text>
                   )}
 
                   {/* Name */}
-                  <text
-                    x={cx}
-                    y={cy + (p.castle || (p.city && p.city.level > 0) ? 6 : 0)}
-                    textAnchor="middle"
-                    className="map-label"
-                    fontSize={p.isOwned || isSelected ? 11 : 9}
-                    fontWeight={p.isOwned ? 700 : 500}
-                    fill={isSelected ? '#fff8d0' : '#f0ead8'}
-                    style={{ paintOrder: 'stroke', stroke: '#1a1208', strokeWidth: 2.5 }}
-                  >
-                    {p.name.length > 12 ? p.name.slice(0, 11) + '…' : p.name}
-                  </text>
-
-                  {p.ownerName && (
+                  {(lod !== 'near' || isSelected || p.isOwned) && (
                     <text
                       x={cx}
-                      y={cy + 16}
+                      y={cy + (lod === 'far' ? 4 : 14)}
+                      textAnchor="middle"
+                      className="map-label"
+                      fontSize={lod === 'far' ? (p.isOwned || isSelected ? 12 : 9) : p.isOwned || isSelected ? 11 : 9}
+                      fontWeight={p.isOwned ? 700 : 500}
+                      fill={isSelected ? '#fff8d0' : '#f0ead8'}
+                      style={{ paintOrder: 'stroke', stroke: '#1a1208', strokeWidth: 2.5 }}
+                    >
+                      {lod === 'far' && p.name.length > 10 ? p.name.slice(0, 9) + '…' : p.name}
+                    </text>
+                  )}
+
+                  {lod === 'mid' && p.ownerName && (
+                    <text
+                      x={cx}
+                      y={cy + 26}
                       textAnchor="middle"
                       fontSize={7}
                       fill="#d4c4a0"
@@ -229,11 +339,10 @@ export default function WorldMap({
                     </text>
                   )}
 
-                  {/* Armee-Marker */}
-                  {fieldTroops > 0 && (
+                  {fieldTroops > 0 && lod !== 'far' && (
                     <g>
-                      <circle cx={cx + 38} cy={cy - 22} r={11} fill="#6b1515" stroke="#d4af37" strokeWidth={1.5} />
-                      <text x={cx + 38} y={cy - 18} textAnchor="middle" fontSize={8} fill="#fff" fontWeight="bold">
+                      <circle cx={cx + 36} cy={cy - 20} r={11} fill="#6b1515" stroke="#d4af37" strokeWidth={1.5} />
+                      <text x={cx + 36} y={cy - 16} textAnchor="middle" fontSize={8} fill="#fff" fontWeight="bold">
                         {fieldTroops}
                       </text>
                     </g>
@@ -241,6 +350,26 @@ export default function WorldMap({
                 </g>
               );
             })}
+
+            {/* Ambient Leben (mid/near) */}
+            {lod !== 'far' &&
+              ambient.map((a) => (
+                <text
+                  key={a.id}
+                  x={a.x}
+                  y={a.y}
+                  fontSize={a.kind === 'smoke' || a.kind === 'flag' ? 11 : 10}
+                  className={a.kind === 'flag' ? 'ambient-flag' : a.kind === 'smoke' ? 'map-smoke' : 'ambient-wander'}
+                  style={{
+                    animationDelay: `${a.delay}s`,
+                    animationDuration: `${a.duration}s`,
+                  }}
+                  opacity={lod === 'near' ? 0.9 : 0.65}
+                  pointerEvents="none"
+                >
+                  {AMBIENT_GLYPH[a.kind]}
+                </text>
+              ))}
 
             {/* Marschierende Armeen */}
             {marchingArmies.map((army) => {
@@ -261,7 +390,7 @@ export default function WorldMap({
                     stroke="#d4af37"
                     strokeWidth={2.5}
                     strokeDasharray="8 5"
-                    opacity={0.9}
+                    className="march-line"
                   />
                   <circle cx={mx} cy={my} r={12} fill="#d4af37" stroke="#1a1208" strokeWidth={1} />
                   <text x={mx} y={my + 4} textAnchor="middle" fontSize={11} fill="#1a1208" fontWeight="bold">
@@ -274,8 +403,7 @@ export default function WorldMap({
         </svg>
       </div>
 
-      {/* Legende */}
-      <div className="absolute bottom-2 left-2 z-20 flex flex-wrap gap-2 max-w-[70%] pointer-events-none">
+      <div className="absolute bottom-2 left-2 z-20 flex flex-wrap gap-2 max-w-[75%] pointer-events-none">
         {ownerIds.map((id, i) => {
           const name = provinces.find((p) => p.ownerId === id)?.ownerName ?? 'Reich';
           return (

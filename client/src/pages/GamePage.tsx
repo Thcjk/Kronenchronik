@@ -7,6 +7,8 @@ import WorldMap from '../components/WorldMap';
 import ProvincePanel from '../components/ProvincePanel';
 import CharacterPanel from '../components/CharacterPanel';
 import CityView from '../components/CityView';
+import IntroOverlay from '../components/IntroOverlay';
+import { buildIntroStory, INTRO_SEEN_KEY } from '../lore/intro';
 
 export default function GamePage() {
   const [gameState, setGameState] = useState<GameState | null>(null);
@@ -19,6 +21,7 @@ export default function GamePage() {
   const [showChar, setShowChar] = useState(true);
   const [showPanel, setShowPanel] = useState(true);
   const [cityViewId, setCityViewId] = useState<string | null>(null);
+  const [showIntro, setShowIntro] = useState(false);
 
   const loadGame = useCallback(async () => {
     try {
@@ -38,6 +41,21 @@ export default function GamePage() {
   useEffect(() => {
     loadGame();
   }, [loadGame]);
+
+  useEffect(() => {
+    if (!gameState) return;
+    const key = `${INTRO_SEEN_KEY}_${gameState.kingdom.id}`;
+    if (!localStorage.getItem(key)) {
+      setShowIntro(true);
+    }
+  }, [gameState]);
+
+  const dismissIntro = () => {
+    if (gameState) {
+      localStorage.setItem(`${INTRO_SEEN_KEY}_${gameState.kingdom.id}`, '1');
+    }
+    setShowIntro(false);
+  };
 
   useEffect(() => {
     if (!isOfflineMode) return;
@@ -128,6 +146,22 @@ export default function GamePage() {
 
   return (
     <div className="h-full flex flex-col relative">
+      {showIntro && gameState && (
+        <IntroOverlay
+          rulerName={gameState.dynasty.ruler?.name ?? 'Herrscher'}
+          kingdomName={gameState.kingdom.name}
+          dynastyName={gameState.dynasty.dynasty?.name ?? 'Haus'}
+          startProvince={gameState.provinces.find((p) => p.isOwned)?.name ?? 'Grenzgrafschaft'}
+          story={buildIntroStory({
+            rulerName: gameState.dynasty.ruler?.name ?? 'Herrscher',
+            kingdomName: gameState.kingdom.name,
+            dynastyName: gameState.dynasty.dynasty?.name ?? 'Haus',
+            startProvince: gameState.provinces.find((p) => p.isOwned)?.name ?? 'Grenzgrafschaft',
+          })}
+          onContinue={dismissIntro}
+        />
+      )}
+
       {/* Ressourcen-HUD oben */}
       <div className="shrink-0 px-3 py-1.5 bg-black/40 border-b border-gold/20 flex flex-wrap items-center justify-between gap-2">
         <div className="font-display text-sm text-gold truncate">{gameState.kingdom.name}</div>
@@ -166,7 +200,12 @@ export default function GamePage() {
         {/* Charakter links (CK3-Stil) */}
         {showChar && gameState.dynasty && (
           <div className="absolute top-2 left-2 z-30 w-[min(100%-1rem,280px)] max-h-[calc(100%-1rem)] overflow-y-auto side-drawer">
-            <CharacterPanel dynasty={gameState.dynasty} compact onClose={() => setShowChar(false)} />
+            <CharacterPanel
+              dynasty={gameState.dynasty}
+              compact
+              kingdomName={gameState.kingdom.name}
+              onClose={() => setShowChar(false)}
+            />
           </div>
         )}
 
