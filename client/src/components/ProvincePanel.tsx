@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { Province, Army, GameState, BattleResult } from '../api/client';
 import { api } from '../api/client';
+import { CityTileKind, countKind } from '@kronenchronik/shared';
+import { toneClass, toneHighGood, toneHighBad, toneNet, toneHousing, toneJobs } from '../ui/statusTone';
 
 const BUILDING_LABELS: Record<string, string> = {
   PALISADE: 'Palisade',
@@ -63,6 +65,98 @@ export default function ProvincePanel({
   const isNeighbor = gameState.provinces
     .filter((p) => p.isOwned)
     .some((owned) => owned.neighbors.some((n) => n.id === province.id));
+
+  const infoCards = useMemo(() => {
+    const tiles = (province.cityGrid ?? []).map((t) => ({
+      ...t,
+      kind: t.kind as CityTileKind,
+    }));
+    const houses =
+      countKind(tiles, CityTileKind.HOUSE) + countKind(tiles, CityTileKind.NOBLE_HOUSE) * 2;
+    const housing = 40 + houses * 18;
+    const jobs =
+      countKind(tiles, CityTileKind.FARM) * 3 +
+      countKind(tiles, CityTileKind.LUMBER_CAMP) * 2 +
+      countKind(tiles, CityTileKind.MINE) * 2 +
+      countKind(tiles, CityTileKind.SMITHY) * 2 +
+      countKind(tiles, CityTileKind.MARKET) * 2 +
+      countKind(tiles, CityTileKind.BAKERY) * 2 +
+      countKind(tiles, CityTileKind.WEAVER) * 2 +
+      countKind(tiles, CityTileKind.BARRACKS) * 4 +
+      countKind(tiles, CityTileKind.CHURCH) +
+      countKind(tiles, CityTileKind.SCHOOL) * 2;
+    const housingPct = housing > 0 ? Math.round((province.population / housing) * 100) : 0;
+    const jobsPct = province.population > 0 ? Math.round((jobs / province.population) * 100) : 0;
+    const stock = province.devStats?.stock;
+    const taxRate = province.devStats?.taxRate ?? 30;
+    const taxGold = Math.floor(
+      (province.population / 100) * (taxRate / 30) * (1 + (province.prosperity ?? 50) / 100),
+    );
+    const foodNet = (stock?.bread ?? 0) + (stock?.grain ?? 0) > 20 ? 1 : (stock?.bread ?? 0) < 8 ? -1 : 0;
+
+    return [
+      {
+        label: 'Bevölkerung',
+        value: `${province.population.toLocaleString('de-DE')} / ${housing.toLocaleString('de-DE')}`,
+        tone: toneHousing(province.population, housing),
+      },
+      {
+        label: 'Wohnraum',
+        value: `${Math.min(999, housingPct)} %`,
+        tone: toneHousing(province.population, housing),
+      },
+      {
+        label: 'Arbeitsplätze',
+        value: `${Math.min(999, jobsPct)} %`,
+        tone: toneJobs(province.population, jobs),
+      },
+      {
+        label: 'Nahrung',
+        value: foodNet > 0 ? '+Vorrat' : foodNet < 0 ? 'knapp' : 'ok',
+        tone: foodNet > 0 ? ('good' as const) : foodNet < 0 ? ('bad' as const) : ('warn' as const),
+      },
+      {
+        label: 'Holz / Stein',
+        value: `${stock?.planks ?? '–'} / ${province.forestStock ?? '–'}`,
+        tone: toneNet((province.forestStock ?? 200) - 80),
+      },
+      {
+        label: 'Werkzeuge',
+        value: String(stock?.tools ?? '–'),
+        tone: toneNet((stock?.tools ?? 5) - 3),
+      },
+      {
+        label: 'Steuern',
+        value: `+${taxGold} Gold`,
+        tone: taxRate > 50 ? ('warn' as const) : ('good' as const),
+      },
+      {
+        label: 'Zufriedenheit',
+        value: `${province.devStats?.satisfaction ?? '–'} %`,
+        tone: toneHighGood(province.devStats?.satisfaction),
+      },
+      {
+        label: 'Verteidigung',
+        value: `${province.defense} %`,
+        tone: toneHighGood(province.defense, 50, 25),
+      },
+      {
+        label: 'Loyalität',
+        value: `${province.devStats?.loyalty ?? '–'} %`,
+        tone: toneHighGood(province.devStats?.loyalty),
+      },
+      {
+        label: 'Sicherheit',
+        value: `${province.devStats?.security ?? '–'} %`,
+        tone: toneHighGood(province.devStats?.security),
+      },
+      {
+        label: 'Kriminalität',
+        value: `${province.devStats?.crime ?? '–'} %`,
+        tone: toneHighBad(province.devStats?.crime),
+      },
+    ];
+  }, [province]);
 
   const handleAction = async (
     action: () => Promise<GameState | { gameState: GameState; result?: BattleResult }>,
@@ -128,6 +222,17 @@ export default function ProvincePanel({
           </div>
         </div>
       </div>
+
+      {isOwned && (
+        <div className="info-card-grid">
+          {infoCards.map((c) => (
+            <div key={c.label} className={toneClass(c.tone)}>
+              <div className="info-card-label">{c.label}</div>
+              <div className="info-card-value">{c.value}</div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {province.buildings.length > 0 && (
         <div>

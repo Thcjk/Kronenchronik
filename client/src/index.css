@@ -180,7 +180,16 @@ h3,
 }
 
 .world-map-shell {
-  background: radial-gradient(ellipse at 50% 30%, #1a2a1f 0%, #0c1210 70%);
+  background:
+    radial-gradient(ellipse at 45% 28%, #e8d4a8 0%, #d4bc8a 42%, #b89a68 100%);
+}
+
+.parchment-map {
+  box-shadow: inset 0 0 80px rgba(80, 50, 20, 0.18);
+}
+
+.parchment-svg {
+  filter: contrast(1.02) saturate(0.92);
 }
 
 .map-label {
@@ -192,6 +201,353 @@ h3,
 .map-icon {
   pointer-events: none;
   user-select: none;
+}
+
+.map-settlement-art {
+  pointer-events: none;
+}
+
+/* Ressourcen-HUD */
+.resource-bar-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  justify-content: center;
+  align-items: stretch;
+}
+
+.resource-card {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 5.5rem;
+  padding: 0.35rem 0.55rem;
+  background: linear-gradient(180deg, rgba(50, 40, 28, 0.95), rgba(22, 18, 12, 0.98));
+  border: 1px solid rgba(212, 175, 55, 0.3);
+  border-radius: 4px;
+}
+
+.resource-card.is-low {
+  border-color: rgba(200, 80, 60, 0.55);
+}
+
+.resource-card.is-drain .flow-out {
+  color: #f0a0a0;
+  font-weight: 600;
+}
+
+.resource-card-icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.resource-card-body {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.resource-card-label {
+  font-size: 0.6rem;
+  color: rgba(232, 220, 196, 0.55);
+  font-family: var(--font-display);
+  letter-spacing: 0.04em;
+}
+
+.resource-card-amount {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-gold);
+  font-family: var(--font-display);
+}
+
+.resource-card-flow {
+  display: flex;
+  gap: 0.35rem;
+  font-size: 0.62rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.flow-in {
+  color: #8fbf7a;
+}
+
+.flow-out {
+  color: #c4a090;
+}
+
+/* Info-Karten */
+.info-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.info-card {
+  border-radius: 4px;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid rgba(212, 175, 55, 0.2);
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.info-card-label {
+  font-size: 0.6rem;
+  color: rgba(232, 220, 196, 0.55);
+  margin-bottom: 0.15rem;
+}
+
+.info-card-value {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  color: var(--color-gold);
+}
+
+.info-card.tone-good {
+  border-color: rgba(90, 160, 90, 0.55);
+  background: rgba(30, 70, 40, 0.35);
+}
+.info-card.tone-good .info-card-value {
+  color: #9fd989;
+}
+
+.info-card.tone-warn {
+  border-color: rgba(200, 160, 50, 0.55);
+  background: rgba(80, 60, 20, 0.35);
+}
+.info-card.tone-warn .info-card-value {
+  color: #e8c547;
+}
+
+.info-card.tone-bad {
+  border-color: rgba(180, 60, 50, 0.55);
+  background: rgba(80, 25, 20, 0.4);
+}
+.info-card.tone-bad .info-card-value {
+  color: #f0a0a0;
+}
+
+/* Stadtansicht Landschaft */
+.city-landscape-frame {
+  padding: 0.75rem;
+  border-radius: 6px;
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  background:
+    linear-gradient(180deg, rgba(70, 110, 70, 0.25), rgba(40, 70, 40, 0.15)),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 18px,
+      rgba(255, 255, 255, 0.02) 18px,
+      rgba(255, 255, 255, 0.02) 19px
+    );
+  box-shadow:
+    inset 0 0 40px rgba(20, 40, 20, 0.35),
+    0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+.city-landscape-grid {
+  display: inline-grid;
+  gap: 2px;
+}
+
+.city-tile {
+  aspect-ratio: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  border: 1px solid transparent;
+  transition: transform 0.12s ease, filter 0.12s ease;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.city-tile:hover {
+  transform: scale(1.08);
+  z-index: 2;
+  filter: brightness(1.08);
+}
+
+.city-tile.is-meadow {
+  background:
+    linear-gradient(160deg, #4a7a3c 0%, #3a6a30 55%, #2e5528 100%);
+  border-color: rgba(80, 120, 60, 0.35);
+}
+
+.city-tile.is-meadow.is-hill {
+  background: linear-gradient(160deg, #5a8050, #4a6a38);
+}
+
+.city-tile.is-meadow.is-trees::after {
+  content: '';
+  position: absolute;
+  width: 30%;
+  height: 30%;
+  border-radius: 50% 50% 40% 40%;
+  background: #2d4a22;
+  opacity: 0.55;
+  top: 20%;
+  right: 15%;
+}
+
+.city-tile.is-road {
+  background: linear-gradient(180deg, #a89060, #8a7348);
+  border-color: rgba(140, 110, 60, 0.5);
+  box-shadow: inset 0 0 0 1px rgba(60, 40, 20, 0.25);
+}
+
+.city-tile.is-field {
+  background:
+    repeating-linear-gradient(
+      90deg,
+      #c4a86a 0 3px,
+      #b89858 3px 6px
+    );
+  border-color: rgba(140, 110, 50, 0.4);
+}
+
+.city-tile.is-wall {
+  background: linear-gradient(180deg, #8a8680, #6a6560);
+  border-color: rgba(80, 80, 80, 0.5);
+}
+
+.city-tile.is-building {
+  background: linear-gradient(180deg, #6b5344 0%, #4a3a2c 100%);
+  border-color: rgba(212, 175, 55, 0.35);
+  box-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 230, 160, 0.12);
+}
+
+.city-tile.is-building-site {
+  outline: 1px dashed rgba(232, 197, 71, 0.7);
+}
+
+.city-building-glyph {
+  font-size: 1.05rem;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45));
+  transform: scale(1);
+}
+
+.city-building-glyph.lv-2 {
+  transform: scale(1.08);
+}
+.city-building-glyph.lv-3 {
+  transform: scale(1.16);
+}
+.city-building-glyph.lv-4,
+.city-building-glyph.lv-5 {
+  transform: scale(1.24);
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.5));
+}
+
+.city-tile-level {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  font-size: 0.55rem;
+  line-height: 1;
+  padding: 0.05rem 0.2rem;
+  background: rgba(0, 0, 0, 0.65);
+  color: var(--color-gold);
+}
+
+.city-tile-build {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  font-size: 0.55rem;
+  color: #f5e6a3;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.city-tile-smoke {
+  position: absolute;
+  top: 2px;
+  left: 40%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(180, 180, 180, 0.5);
+  animation: smokeRise 3s ease-out infinite;
+}
+
+.city-tooltip {
+  background: rgba(20, 16, 12, 0.92);
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  border-radius: 4px;
+  padding: 0.45rem 0.7rem;
+  max-width: 16rem;
+}
+
+.build-palette-item {
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  border-radius: 4px;
+  border: 1px solid rgba(212, 175, 55, 0.2);
+  background: rgba(0, 0, 0, 0.3);
+  color: rgba(232, 220, 196, 0.85);
+}
+
+.build-palette-item.is-selected {
+  border-color: var(--color-gold);
+  background: rgba(212, 175, 55, 0.12);
+}
+
+.build-palette-item.is-locked {
+  opacity: 0.4;
+}
+
+.build-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+  margin-top: 0.25rem;
+  font-size: 0.58rem;
+  color: rgba(232, 220, 196, 0.55);
+}
+
+.build-detail-panel {
+  border: 1px solid rgba(212, 175, 55, 0.25);
+  border-radius: 4px;
+  padding: 0.5rem;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.production-chain {
+  border-left: 2px solid rgba(212, 175, 55, 0.35);
+  padding-left: 0.6rem;
+}
+
+.production-chain-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.7rem;
+  color: rgba(232, 220, 196, 0.8);
+}
+
+.production-arrow {
+  display: inline-block;
+  width: 1rem;
+  color: rgba(212, 175, 55, 0.65);
+  margin-right: 0.15rem;
+}
+
+@media (max-width: 640px) {
+  .info-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .resource-card {
+    min-width: 4.8rem;
+    padding: 0.3rem 0.4rem;
+  }
+  .resource-card-icon {
+    font-size: 1.05rem;
+  }
 }
 
 .text-gold {

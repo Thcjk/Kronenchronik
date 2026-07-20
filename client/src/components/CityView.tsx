@@ -11,7 +11,16 @@ import {
   computeSettlementVisualLevel,
   capitalVisualTitle,
   computeCityTier,
+  countKind,
 } from '@kronenchronik/shared';
+import {
+  explainBuildBlockers,
+  formatBuildCost,
+  buildTimeLabel,
+  buildingJobsHint,
+  buildingProducesHint,
+} from '../ui/buildHints';
+import { toneClass, toneHighGood, toneHousing, toneJobs } from '../ui/statusTone';
 
 interface CityViewProps {
   province: Province;
@@ -22,6 +31,30 @@ interface CityViewProps {
 
 type Mode = 'build' | 'upgrade' | 'demolish';
 
+const CHAINS: Array<{ title: string; steps: string[] }> = [
+  { title: 'Brot', steps: ['🌾 Getreide', 'Mühle', 'Mehl', 'Bäckerei', '🍞 Brot', 'Bevölkerung'] },
+  { title: 'Kleidung', steps: ['🐑 Wolle', 'Weberei', 'Stoff', 'Schneiderei', '👔 Kleidung'] },
+  { title: 'Werkzeuge', steps: ['🪓 Holz', 'Sägewerk', 'Bretter', 'Werkstatt', '🔧 Werkzeuge'] },
+  { title: 'Waffen', steps: ['⛏️ Eisen', 'Holzkohle', 'Schmelze', 'Stahl', 'Schmiede', '⚔️ Waffen'] },
+];
+
+function tileTerrainClass(kind: CityTileKind, x: number, y: number): string {
+  if (kind === CityTileKind.ROAD) return 'city-tile is-road';
+  if (kind === CityTileKind.EMPTY) {
+    const n = (x * 7 + y * 13) % 5;
+    if (n === 0) return 'city-tile is-meadow is-hill';
+    if (n === 1) return 'city-tile is-meadow is-trees';
+    return 'city-tile is-meadow';
+  }
+  if (kind === CityTileKind.FARM || kind === CityTileKind.VINEYARD || kind === CityTileKind.SHEEP_FARM) {
+    return 'city-tile is-field';
+  }
+  if (kind === CityTileKind.WALL || kind === CityTileKind.TOWER || kind === CityTileKind.GATE) {
+    return 'city-tile is-wall';
+  }
+  return 'city-tile is-building';
+}
+
 export default function CityView({ province, gameState, onUpdate, onBack }: CityViewProps) {
   const [selectedKind, setSelectedKind] = useState<CityTileKind>(CityTileKind.HOUSE);
   const [mode, setMode] = useState<Mode>('build');
@@ -30,8 +63,11 @@ export default function CityView({ province, gameState, onUpdate, onBack }: City
   const [error, setError] = useState('');
   const [tab, setTab] = useState<'map' | 'stats' | 'trade'>('map');
   const [taxDraft, setTaxDraft] = useState(province.devStats?.taxRate ?? 30);
+  const [hoverTile, setHoverTile] = useState<{ x: number; y: number; kind: string; level: number } | null>(
+    null,
+  );
 
-  const tiles = province.cityGrid ?? [];
+  const tiles = useMemo(() => province.cityGrid ?? [], [province.cityGrid]);
   const isCapital = Boolean(province.isCapital);
   const cityLevel = province.city?.level ?? 0;
   const villageLevel = province.village?.level ?? 0;
@@ -55,11 +91,36 @@ export default function CityView({ province, gameState, onUpdate, onBack }: City
   const stats = province.devStats;
   const stock = stats?.stock;
   const professions = province.professions;
+  const resources = gameState.kingdom.resources;
 
   const palette = useMemo(() => {
     const cat = BUILD_CATEGORIES.find((c) => c.id === category);
     return cat?.kinds ?? [];
   }, [category]);
+
+  const typedTiles = useMemo(
+    () =>
+      tiles.map((t) => ({
+        ...t,
+        kind: t.kind as CityTileKind,
+      })),
+    [tiles],
+  );
+
+  const houses =
+    countKind(typedTiles, CityTileKind.HOUSE) + countKind(typedTiles, CityTileKind.NOBLE_HOUSE) * 2;
+  const housing = 40 + houses * 18;
+  const jobs =
+    countKind(typedTiles, CityTileKind.FARM) * 3 +
+    countKind(typedTiles, CityTileKind.LUMBER_CAMP) * 2 +
+    countKind(typedTiles, CityTileKind.MINE) * 2 +
+    countKind(typedTiles, CityTileKind.SMITHY) * 2 +
+    countKind(typedTiles, CityTileKind.MARKET) * 2 +
+    countKind(typedTiles, CityTileKind.BAKERY) * 2 +
+    countKind(typedTiles, CityTileKind.WEAVER) * 2 +
+    countKind(typedTiles, CityTileKind.BARRACKS) * 4 +
+    countKind(typedTiles, CityTileKind.CHURCH) +
+    countKind(typedTiles, CityTileKind.SCHOOL) * 2;
 
   const grid: Array<{
     x: number;
@@ -81,10 +142,41 @@ export default function CityView({ province, gameState, onUpdate, onBack }: City
     }
   }
 
+  const def = CITY_TILE_DEFS[selectedKind];
+  const softBlockers = useMemo(
+    () => explainBuildBlockers(selectedKind, province, resources).filter((b) => b.startsWith('❌')),
+    [selectedKind, province, resources],
+  );
+
+  const mapError = (msg: string) => {
+    if (msg.includes('Holz')) return '❌ Nicht genug Holz';
+    if (msg.includes('Gold')) return '❌ Nicht genug Gold';
+    if (msg.includes('Stein')) return '❌ Nicht genug Stein';
+    if (msg.includes('Eisen')) return '❌ Nicht genug Eisen';
+    if (msg.includes('Nahrung') || msg.includes('food')) return '❌ Zu wenig Nahrung';
+    if (msg.includes('Straßen')) return '❌ Straße fehlt';
+    if (msg.includes('Stadtstufe')) return `❌ ${msg}`;
+    if (msg.includes('Ressourcen')) return '❌ Nicht genügend Ressourcen';
+    if (msg.includes('Bevölkerung')) return '❌ Zu wenig Bevölkerung';
+    if (msg.includes('Arbeiter')) return '❌ Kein freier Arbeiter';
+    if (msg.includes('Forschung')) return '❌ Forschung fehlt';
+    return msg.startsWith('❌') ? msg : `❌ ${msg}`;
+  };
+
   const handleTileClick = async (x: number, y: number) => {
     setLoading(true);
     setError('');
     try {
+      if (mode === 'build') {
+        const blockers = explainBuildBlockers(selectedKind, province, resources, x, y).filter((b) =>
+          b.startsWith('❌'),
+        );
+        if (blockers.length) {
+          setError(blockers[0]);
+          setLoading(false);
+          return;
+        }
+      }
       let state: GameState;
       if (mode === 'demolish') {
         state = await api.demolishCityTile({ provinceId: province.id, x, y });
@@ -100,7 +192,7 @@ export default function CityView({ province, gameState, onUpdate, onBack }: City
       }
       onUpdate(state);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Fehler');
+      setError(mapError(e instanceof Error ? e.message : 'Fehler'));
     } finally {
       setLoading(false);
     }
@@ -113,7 +205,7 @@ export default function CityView({ province, gameState, onUpdate, onBack }: City
       const state = await api.setProvinceTax({ provinceId: province.id, taxRate: taxDraft });
       onUpdate(state);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Fehler');
+      setError(mapError(e instanceof Error ? e.message : 'Fehler'));
     } finally {
       setLoading(false);
     }
@@ -126,13 +218,11 @@ export default function CityView({ province, gameState, onUpdate, onBack }: City
       const state = await api.setCapital({ provinceId: province.id });
       onUpdate(state);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Fehler');
+      setError(mapError(e instanceof Error ? e.message : 'Fehler'));
     } finally {
       setLoading(false);
     }
   };
-
-  const def = CITY_TILE_DEFS[selectedKind];
 
   return (
     <div className="h-full flex flex-col bg-ink">
@@ -179,6 +269,46 @@ export default function CityView({ province, gameState, onUpdate, onBack }: City
 
       {tab === 'stats' ? (
         <div className="flex-1 overflow-y-auto p-3 space-y-3">
+          <div className="info-card-grid">
+            {[
+              {
+                label: 'Bevölkerung',
+                value: `${province.population} / ${housing}`,
+                tone: toneHousing(province.population, housing),
+              },
+              {
+                label: 'Wohnraum',
+                value: `${Math.round((province.population / Math.max(1, housing)) * 100)} %`,
+                tone: toneHousing(province.population, housing),
+              },
+              {
+                label: 'Arbeitsplätze',
+                value: `${Math.round((jobs / Math.max(1, province.population)) * 100)} %`,
+                tone: toneJobs(province.population, jobs),
+              },
+              {
+                label: 'Zufriedenheit',
+                value: `${stats?.satisfaction ?? '–'} %`,
+                tone: toneHighGood(stats?.satisfaction),
+              },
+              {
+                label: 'Loyalität',
+                value: `${stats?.loyalty ?? '–'} %`,
+                tone: toneHighGood(stats?.loyalty),
+              },
+              {
+                label: 'Verteidigung',
+                value: `${province.defense}`,
+                tone: toneHighGood(province.defense, 50, 25),
+              },
+            ].map((c) => (
+              <div key={c.label} className={toneClass(c.tone)}>
+                <div className="info-card-label">{c.label}</div>
+                <div className="info-card-value">{c.value}</div>
+              </div>
+            ))}
+          </div>
+
           <div className="panel p-3">
             <div className="panel-header">Entwicklungsstufe</div>
             <p className="text-xs text-parchment/80 mb-2">
@@ -201,23 +331,46 @@ export default function CityView({ province, gameState, onUpdate, onBack }: City
           </div>
 
           <div className="panel p-3">
-            <div className="panel-header">Provinzwerte</div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
-              {[
-                ['Zufriedenheit', stats?.satisfaction],
-                ['Loyalität', stats?.loyalty],
-                ['Sicherheit', stats?.security],
-                ['Kriminalität', stats?.crime],
-                ['Gesundheit', stats?.health],
-                ['Bildung', stats?.education],
-                ['Wohlstand', province.prosperity],
-                ['Verteidigung', province.defense],
-                ['Wald', province.forestStock],
-                ['Erz', province.mineStock],
-              ].map(([label, val]) => (
-                <div key={String(label)} className="bg-black/40 rounded p-2 border border-gold/15">
+            <div className="panel-header">Produktionsketten</div>
+            <div className="space-y-3">
+              {CHAINS.map((chain) => (
+                <div key={chain.title} className="production-chain">
+                  <div className="text-[10px] text-gold font-display mb-1">{chain.title}</div>
+                  <div className="production-chain-steps">
+                    {chain.steps.map((step, i) => (
+                      <span key={step} className="production-step">
+                        {i > 0 && <span className="production-arrow">↓</span>}
+                        <span>{step}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs mt-3">
+              {(
+                [
+                  ['🌾 Getreide', stock?.grain],
+                  ['⚙️ Mehl', stock?.flour],
+                  ['🍞 Brot', stock?.bread],
+                  ['🐟 Fisch', stock?.fish],
+                  ['🥩 Fleisch', stock?.meat],
+                  ['🪵 Bretter', stock?.planks],
+                  ['🔧 Werkzeuge', stock?.tools],
+                  ['🐑 Wolle', stock?.wool],
+                  ['🧵 Stoff', stock?.cloth],
+                  ['👔 Kleidung', stock?.clothes],
+                  ['🔥 Holzkohle', stock?.charcoal],
+                  ['⚙️ Stahl', stock?.steel],
+                  ['⚔️ Waffen', stock?.weapons],
+                  ['🛡️ Rüstung', stock?.armor],
+                  ['🍺 Bier', stock?.beer],
+                  ['🍇 Wein', stock?.wine],
+                ] as const
+              ).map(([label, val]) => (
+                <div key={label} className="bg-black/40 rounded p-2 border border-gold/15">
                   <div className="text-parchment/50 text-[10px]">{label}</div>
-                  <div className="text-gold font-display text-sm">{val ?? '–'}</div>
+                  <div className="text-gold font-display">{val ?? 0}</div>
                 </div>
               ))}
             </div>
@@ -270,96 +423,22 @@ export default function CityView({ province, gameState, onUpdate, onBack }: City
               </div>
             </div>
           )}
-
-          <div className="panel p-3">
-            <div className="panel-header">Lager & Produktionsketten</div>
-            <div className="text-[11px] text-parchment/70 mb-2 space-y-1">
-              <div>🌾→⚙️→🍞 Getreide → Mühle → Mehl → Bäckerei → Brot</div>
-              <div>🐑→🧵→👔 Wolle → Weberei → Stoff → Schneiderei → Kleidung</div>
-              <div>🪓→🪵→🔧 Holz → Bretter → Werkzeuge</div>
-              <div>⛏️→🔥→⚔️ Eisen → Holzkohle/Stahl → Waffen & Rüstung</div>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-              {(
-                [
-                  ['🌾 Getreide', stock?.grain],
-                  ['⚙️ Mehl', stock?.flour],
-                  ['🍞 Brot', stock?.bread],
-                  ['🐟 Fisch', stock?.fish],
-                  ['🥩 Fleisch', stock?.meat],
-                  ['🪵 Bretter', stock?.planks],
-                  ['🔧 Werkzeuge', stock?.tools],
-                  ['🐑 Wolle', stock?.wool],
-                  ['🧵 Stoff', stock?.cloth],
-                  ['👔 Kleidung', stock?.clothes],
-                  ['🔥 Holzkohle', stock?.charcoal],
-                  ['⚙️ Stahl', stock?.steel],
-                  ['⚔️ Waffen', stock?.weapons],
-                  ['🛡️ Rüstung', stock?.armor],
-                  ['🍺 Bier', stock?.beer],
-                  ['🍇 Wein', stock?.wine],
-                  ['🐴 Pferde', stock?.horses],
-                  ['💎 Luxus', stock?.luxury],
-                  ['🪙 Reich-Gold', gameState.kingdom.resources.gold],
-                ] as const
-              ).map(([label, val]) => (
-                <div key={label} className="bg-black/40 rounded p-2 border border-gold/15">
-                  <div className="text-parchment/50 text-[10px]">{label}</div>
-                  <div className="text-gold font-display">{val ?? 0}</div>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       ) : tab === 'trade' ? (
         <div className="flex-1 overflow-y-auto p-3 space-y-3">
           <div className="panel p-3">
             <div className="panel-header">Automatischer Handel</div>
             <p className="text-xs text-parchment/70 mb-2">
-              Benachbarte eigene Provinzen tauschen Überschüsse (Getreide, Werkzeuge, Stoff, Stahl)
-              und erzeugen Gold. Nicht jede Stadt produziert alles – plane Spezialisierung.
+              Benachbarte eigene Provinzen tauschen Überschüsse und erzeugen Gold.
             </p>
             <div className="text-[11px] text-parchment/60">
-              Nachbarn:{' '}
-              {province.neighbors.map((n) => n.name).join(', ') || 'keine'}
+              Nachbarn: {province.neighbors.map((n) => n.name).join(', ') || 'keine'}
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-              <div className="bg-black/40 rounded p-2 border border-gold/15">
-                <div className="text-parchment/50 text-[10px]">Export-Hinweis</div>
-                <div className="text-parchment/80">
-                  {(stock?.grain ?? 0) > 40
-                    ? 'Getreideüberschuss'
-                    : (stock?.tools ?? 0) > 20
-                      ? 'Werkzeugüberschuss'
-                      : (stock?.cloth ?? 0) > 15
-                        ? 'Stoffüberschuss'
-                        : 'Ausgewogen / Bedarf'}
-                </div>
-              </div>
-              <div className="bg-black/40 rounded p-2 border border-gold/15">
-                <div className="text-parchment/50 text-[10px]">Nachfrage</div>
-                <div className="text-parchment/80">
-                  {(stock?.bread ?? 0) < 15
-                    ? 'Nahrung knapp'
-                    : (stock?.weapons ?? 0) < 8
-                      ? 'Waffen knapp'
-                      : 'Versorgt'}
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="panel p-3 text-xs text-parchment/70">
-            <div className="panel-header">Reichsentwicklung</div>
-            <p>
-              Baue Straßen und Märkte in jeder Stadt. Burgen (Burgfried, Mauern) produzieren keine
-              Güter – sie verteidigen, lagern und verwalten. Die Hauptstadt sollte als Handels- und
-              Kulturzentrum ausgebaut werden.
-            </p>
           </div>
         </div>
       ) : (
         <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
-          <div className="shrink-0 lg:w-60 border-b lg:border-b-0 lg:border-r border-gold/20 bg-black/40 overflow-x-auto lg:overflow-y-auto p-2">
+          <div className="shrink-0 lg:w-72 border-b lg:border-b-0 lg:border-r border-gold/20 bg-black/40 overflow-x-auto lg:overflow-y-auto p-2">
             <div className="flex gap-1 mb-2">
               {(
                 [
@@ -397,39 +476,59 @@ export default function CityView({ province, gameState, onUpdate, onBack }: City
                     </button>
                   ))}
                 </div>
-                <div className="flex lg:flex-col gap-1 flex-wrap lg:flex-nowrap">
+                <div className="flex lg:flex-col gap-1.5 flex-wrap lg:flex-nowrap">
                   {palette.map((kind) => {
                     const d = CITY_TILE_DEFS[kind];
                     const locked = cityLevel < d.minCityLevel;
+                    const costLine = formatBuildCost(kind);
                     return (
                       <button
                         key={kind}
                         type="button"
                         disabled={locked || loading}
                         onClick={() => setSelectedKind(kind)}
-                        className={`text-left text-[11px] px-2 py-1.5 rounded border transition-colors ${
-                          selectedKind === kind
-                            ? 'border-gold bg-gold/15 text-gold'
-                            : 'border-gold/20 bg-black/30 text-parchment/80'
-                        } ${locked ? 'opacity-40' : ''}`}
-                        title={
-                          locked
-                            ? `Stadtstufe ${d.minCityLevel} nötig`
-                            : `${d.cost.gold}g ${d.cost.wood}h ${d.cost.stone}s`
-                        }
+                        className={`build-palette-item text-left ${
+                          selectedKind === kind ? 'is-selected' : ''
+                        } ${locked ? 'is-locked' : ''}`}
                       >
-                        <span className="mr-1">{d.icon}</span>
-                        {d.name}
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-base leading-none">{d.icon}</span>
+                          <span className="font-display text-[11px] text-gold">{d.name}</span>
+                        </div>
+                        <div className="build-meta">
+                          <span>💰 {costLine || 'kostenlos'}</span>
+                          <span>⏱ {buildTimeLabel(kind)}</span>
+                          <span>👷 {buildingJobsHint(kind)}</span>
+                          <span>📦 {buildingProducesHint(kind)}</span>
+                          {d.minCityLevel > 0 && <span>🏛 Stadt {d.minCityLevel}+</span>}
+                        </div>
                       </button>
                     );
                   })}
                 </div>
                 {def && (
-                  <div className="mt-2 text-[10px] text-parchment/50 hidden lg:block">
-                    Kosten: {def.cost.gold} Gold, {def.cost.wood} Holz, {def.cost.stone} Stein
-                    {def.minCityLevel > 0 ? ` · ab Stadt ${def.minCityLevel}` : ''}
-                    <br />
-                    Gebäude brauchen oft Straßenanschluss und Bauzeit.
+                  <div className="mt-2 build-detail-panel">
+                    <div className="font-display text-gold text-xs mb-1">{def.name}</div>
+                    <div className="text-[10px] text-parchment/70 space-y-0.5">
+                      <div>Kosten: {formatBuildCost(selectedKind) || '–'}</div>
+                      <div>Bauzeit: {buildTimeLabel(selectedKind)}</div>
+                      <div>Arbeit / Wirkung: {buildingJobsHint(selectedKind)}</div>
+                      <div>Produziert: {buildingProducesHint(selectedKind)}</div>
+                      <div>
+                        Voraussetzung:{' '}
+                        {def.minCityLevel > 0 ? `Stadtstufe ${def.minCityLevel}` : 'keine Stadtstufe'}
+                        {def.category === 'building' && selectedKind !== CityTileKind.CASTLE_KEEP
+                          ? ' · Straßenanschluss'
+                          : ''}
+                      </div>
+                    </div>
+                    {softBlockers.length > 0 && (
+                      <ul className="mt-2 space-y-0.5 text-[10px] text-red-200">
+                        {softBlockers.map((b) => (
+                          <li key={b}>{b}</li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 )}
               </>
@@ -443,56 +542,70 @@ export default function CityView({ province, gameState, onUpdate, onBack }: City
           </div>
 
           <div
-            className="flex-1 min-h-0 overflow-auto p-2 flex items-start justify-center"
+            className="flex-1 min-h-0 overflow-auto p-2 flex flex-col items-center"
             style={{
-              background: `linear-gradient(180deg, ${look.sky} 0%, ${look.ground} 100%)`,
+              background: `
+                linear-gradient(180deg, ${look.sky} 0%, transparent 45%),
+                radial-gradient(ellipse at 50% 80%, ${look.ground} 0%, #1a2a18 100%)
+              `,
             }}
           >
-            <div
-              className="inline-grid gap-0.5 p-2 rounded border border-gold/30 shadow-2xl"
-              style={{
-                gridTemplateColumns: `repeat(${CITY_GRID_W}, minmax(28px, 36px))`,
-                background: 'rgba(0,0,0,0.35)',
-              }}
-            >
-              {grid.map((tile) => {
-                const kind = tile.kind as CityTileKind;
-                const d = CITY_TILE_DEFS[kind] ?? CITY_TILE_DEFS[CityTileKind.EMPTY];
-                const isRoad = kind === CityTileKind.ROAD;
-                const isEmpty = kind === CityTileKind.EMPTY;
-                const building = Boolean(tile.buildRemaining && tile.buildRemaining > 0);
-                return (
-                  <button
-                    key={`${tile.x}-${tile.y}`}
-                    type="button"
-                    disabled={loading}
-                    onClick={() => handleTileClick(tile.x, tile.y)}
-                    className={`aspect-square relative flex items-center justify-center text-sm rounded-sm border transition-transform hover:scale-110 hover:z-10 ${
-                      isEmpty
-                        ? 'bg-black/25 border-white/5'
-                        : isRoad
-                          ? 'bg-amber-900/50 border-amber-700/40'
-                          : building
-                            ? 'bg-amber-950/60 border-amber-500/50'
-                            : 'bg-black/50 border-gold/25'
-                    }`}
-                    title={`${d.name} Lv${tile.level}${building ? ` (Bau: ${tile.buildRemaining})` : ''} (${tile.x},${tile.y})`}
-                  >
-                    {isEmpty ? '' : d.icon}
-                    {!isEmpty && tile.level > 1 && !building && (
-                      <span className="absolute bottom-0 right-0 text-[8px] text-gold leading-none px-0.5 bg-black/60">
-                        {tile.level}
+            <div className="city-landscape-frame">
+              <div
+                className="city-landscape-grid"
+                style={{
+                  gridTemplateColumns: `repeat(${CITY_GRID_W}, minmax(32px, 40px))`,
+                }}
+              >
+                {grid.map((tile) => {
+                  const kind = tile.kind as CityTileKind;
+                  const d = CITY_TILE_DEFS[kind] ?? CITY_TILE_DEFS[CityTileKind.EMPTY];
+                  const building = Boolean(tile.buildRemaining && tile.buildRemaining > 0);
+                  const cls = tileTerrainClass(kind, tile.x, tile.y);
+                  return (
+                    <button
+                      key={`${tile.x}-${tile.y}`}
+                      type="button"
+                      disabled={loading}
+                      onClick={() => handleTileClick(tile.x, tile.y)}
+                      onMouseEnter={() => setHoverTile(tile)}
+                      onMouseLeave={() => setHoverTile(null)}
+                      className={`${cls}${building ? ' is-building-site' : ''}${tile.level > 1 ? ` lv-${tile.level}` : ''}`}
+                      title={`${d.name} Lv${tile.level}${building ? ` (Bau: ${tile.buildRemaining})` : ''}`}
+                    >
+                      <span className="city-tile-art">
+                        {kind === CityTileKind.EMPTY ? (
+                          <span className="city-tile-empty-mark" />
+                        ) : (
+                          <span className={`city-building-glyph lv-${tile.level}`}>{d.icon}</span>
+                        )}
                       </span>
-                    )}
-                    {building && (
-                      <span className="absolute inset-0 flex items-end justify-center text-[8px] text-amber-200 bg-black/40">
-                        {tile.buildRemaining}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
+                      {!building && tile.level > 1 && kind !== CityTileKind.EMPTY && kind !== CityTileKind.ROAD && (
+                        <span className="city-tile-level">{tile.level}</span>
+                      )}
+                      {building && <span className="city-tile-build">{tile.buildRemaining}</span>}
+                      {tile.level >= 2 && kind !== CityTileKind.EMPTY && kind !== CityTileKind.ROAD && !building && (
+                        <span className="city-tile-smoke" aria-hidden />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
+
+            {hoverTile && (
+              <div className="city-tooltip mt-2">
+                <div className="font-display text-gold text-xs">
+                  {(CITY_TILE_DEFS[hoverTile.kind as CityTileKind] ?? CITY_TILE_DEFS[CityTileKind.EMPTY]).name}
+                  {hoverTile.level > 1 ? ` · Stufe ${hoverTile.level}` : ''}
+                </div>
+                <div className="text-[10px] text-parchment/70">
+                  {buildingProducesHint(hoverTile.kind as CityTileKind)}
+                  {' · '}
+                  {buildingJobsHint(hoverTile.kind as CityTileKind)}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

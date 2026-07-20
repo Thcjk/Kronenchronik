@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { api, type GameState, type Province, type BattleResult, isOfflineMode } from '../api/client';
 import { applyResourceTick, getGameSpeedFromSession } from '../local/localApi';
 import { uiPollIntervalMs } from '@kronenchronik/shared';
@@ -15,6 +15,7 @@ import EventModal from '../components/EventModal';
 import AtmosphereAudio from '../components/AtmosphereAudio';
 import { buildIntroStory, INTRO_SEEN_KEY } from '../lore/intro';
 import { TUTORIAL_DONE_KEY } from '../lore/helpContent';
+import { estimateResourceFlow, perMinute } from '../ui/resourceFlow';
 
 export default function GamePage() {
   const [gameState, setGameState] = useState<GameState | null>(null);
@@ -153,6 +154,11 @@ export default function GamePage() {
     }
   };
 
+  const resourceFlow = useMemo(
+    () => (gameState ? perMinute(estimateResourceFlow(gameState)) : undefined),
+    [gameState],
+  );
+
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center text-gold font-display animate-pulse">
@@ -174,7 +180,7 @@ export default function GamePage() {
       <div className="h-full flex flex-col">
         <div className="shrink-0 px-3 py-1.5 bg-black/40 border-b border-gold/20 flex flex-wrap items-center justify-between gap-2">
           <div className="font-display text-sm text-gold truncate">{gameState.kingdom.name}</div>
-          <ResourceBar resources={gameState.kingdom.resources} />
+          <ResourceBar resources={gameState.kingdom.resources} flow={resourceFlow} />
         </div>
         <div className="flex-1 min-h-0">
           <CityView
@@ -220,7 +226,7 @@ export default function GamePage() {
             <span className="text-parchment/50 font-sans text-[10px] ml-2">Anno {gameState.worldYear}</span>
           ) : null}
         </div>
-        <ResourceBar resources={gameState.kingdom.resources} />
+        <ResourceBar resources={gameState.kingdom.resources} flow={resourceFlow} />
         <div className="flex gap-1 flex-wrap">
           {(['pause', 'normal', 'fast', 'very_fast'] as const).map((sp) => (
             <button
