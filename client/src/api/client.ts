@@ -71,6 +71,12 @@ const remoteApi = {
     request<GameState>('/game/city/found', { method: 'POST', body: JSON.stringify(data) }),
   upgradeCity: (data: { provinceId: string }) =>
     request<GameState>('/game/city/upgrade', { method: 'POST', body: JSON.stringify(data) }),
+  upgradeVillage: (data: { provinceId: string }) =>
+    request<GameState>('/game/village/upgrade', { method: 'POST', body: JSON.stringify(data) }),
+  placeCityTile: (data: { provinceId: string; x: number; y: number; kind: string }) =>
+    request<GameState>('/game/city/place', { method: 'POST', body: JSON.stringify(data) }),
+  demolishCityTile: (data: { provinceId: string; x: number; y: number }) =>
+    request<GameState>('/game/city/demolish', { method: 'POST', body: JSON.stringify(data) }),
   attack: (data: { armyId: string; targetProvinceId: string }) =>
     request<{ battle: Battle; result: BattleResult; gameState: GameState }>('/game/attack', {
       method: 'POST',
@@ -213,6 +219,27 @@ export interface Province {
   buildings: Array<{ id: string; type: string; level: number }>;
   armies: Army[];
   neighbors: Array<{ id: string; slug: string; name: string }>;
+  cityGrid?: Array<{ x: number; y: number; kind: string; level: number }>;
+  devStats?: {
+    satisfaction: number;
+    loyalty: number;
+    security: number;
+    crime: number;
+    health: number;
+    education: number;
+    stock: {
+      grain: number;
+      flour: number;
+      bread: number;
+      planks: number;
+      tools: number;
+      weapons: number;
+      horses: number;
+    };
+  };
+  visualLevel?: number;
+  forestStock?: number;
+  mineStock?: number;
 }
 
 export interface Army {

@@ -9,3 +9,5 @@ export * from './city';
 export * from './dynasty';
 export * from './tick';
 export * from './characters';
+export * from './cityGrid';
+export * from './production';

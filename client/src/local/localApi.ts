@@ -16,6 +16,15 @@ import {
   Terrain,
   UnitType,
   BuildingType,
+  createEmptyCityGrid,
+  CITY_TILE_DEFS,
+  CityTileKind,
+  runCityProduction,
+  recalcDevStats,
+  defaultDevStats,
+  computeSettlementVisualLevel,
+  type CityTile,
+  type ProvinceDevStats,
 } from '@kronenchronik/shared';
 import type {
   User,
@@ -77,6 +86,10 @@ interface SaveProvince {
   city: { level: number } | null;
   buildings: SaveBuilding[];
   neighborSlugs: string[];
+  cityGrid?: CityTile[];
+  devStats?: ProvinceDevStats;
+  forestStock?: number;
+  mineStock?: number;
 }
 
 interface GameSave {
@@ -137,9 +150,25 @@ function getSessionUserId(): string | null {
   return localStorage.getItem(SESSION_KEY);
 }
 
+function ensureProvinceDev(p: SaveProvince) {
+  if (!p.cityGrid || p.cityGrid.length === 0) {
+    p.cityGrid = createEmptyCityGrid();
+  }
+  if (!p.devStats) {
+    p.devStats = defaultDevStats();
+  }
+  if (p.forestStock === undefined) p.forestStock = 1000;
+  if (p.mineStock === undefined) p.mineStock = 800;
+}
+
 function loadSave(userId: string): GameSave | null {
   const raw = localStorage.getItem(saveKey(userId));
-  return raw ? JSON.parse(raw) : null;
+  if (!raw) return null;
+  const save = JSON.parse(raw) as GameSave;
+  for (const p of save.provinces) {
+    if (p.ownerId === save.kingdom.id) ensureProvinceDev(p);
+  }
+  return save;
 }
 
 function storeSave(userId: string, save: GameSave) {
@@ -173,6 +202,10 @@ function createWorld(): SaveProvince[] {
     city: null,
     buildings: [],
     neighborSlugs: seed.neighbors.map(slugify),
+    cityGrid: undefined,
+    devStats: undefined,
+    forestStock: 1000,
+    mineStock: 800,
   }));
 }
 
@@ -186,6 +219,7 @@ function createNewSave(kingdomName: string, rulerName: string): GameSave {
   startProvince.castle = { level: 1 };
   startProvince.village = { level: 1 };
   startProvince.city = { level: 0 };
+  ensureProvinceDev(startProvince);
 
   const dynastyId = uid();
   const rulerId = uid();
@@ -341,6 +375,13 @@ function toGameState(save: GameSave): GameState {
         const n = save.provinces.find((x) => x.slug === slug)!;
         return { id: n.id, slug: n.slug, name: n.name };
       }),
+      cityGrid: p.cityGrid,
+      devStats: p.devStats,
+      visualLevel: p.cityGrid
+        ? computeSettlementVisualLevel(p.cityGrid, p.city?.level ?? 0, p.village?.level ?? 0)
+        : 1,
+      forestStock: p.forestStock,
+      mineStock: p.mineStock,
     })),
     armies: save.armies.map((a) => {
       const prov = save.provinces.find((p) => p.id === a.provinceId);
@@ -383,6 +424,7 @@ export function applyResourceTick(userId: string): GameState | null {
 
   const totalIncome = { gold: 0, food: 0, wood: 0, stone: 0, iron: 0, influence: 0 };
   for (const p of owned) {
+    ensureProvinceDev(p);
     const income = calculateProvinceIncome({
       buildings: p.buildings.map((b) => ({ type: b.type as BuildingType, level: b.level })),
       population: p.population,
@@ -395,6 +437,29 @@ export function applyResourceTick(userId: string): GameState | null {
     totalIncome.stone += income.stone ?? 0;
     totalIncome.iron += income.iron ?? 0;
     totalIncome.influence += income.influence ?? 0;
+
+    // Stadt-Produktionsketten
+    if (p.cityGrid && p.devStats) {
+      const chain = runCityProduction(p.cityGrid, p.devStats.stock);
+      totalIncome.gold += chain.kingdomIncome.gold;
+      totalIncome.food += chain.kingdomIncome.food;
+      totalIncome.wood += chain.kingdomIncome.wood;
+      totalIncome.stone += chain.kingdomIncome.stone;
+      totalIncome.iron += chain.kingdomIncome.iron;
+      p.population = Math.min(50000, p.population + chain.populationDelta);
+      p.prosperity = Math.min(100, p.prosperity + chain.prosperityDelta);
+      p.defense = Math.max(p.defense, 10 + chain.defenseBonus);
+      p.devStats = recalcDevStats(p.cityGrid, p.devStats, chain);
+      // Wald/Mine erschöpfen bei Holzfällern/Minen
+      const lumber = p.cityGrid.filter((t) => t.kind === CityTileKind.LUMBER_CAMP).length;
+      const mines = p.cityGrid.filter((t) => t.kind === CityTileKind.MINE).length;
+      p.forestStock = Math.max(0, (p.forestStock ?? 0) - lumber * 2);
+      p.mineStock = Math.max(0, (p.mineStock ?? 0) - mines * 1);
+      if ((p.forestStock ?? 0) < 100) totalIncome.wood = Math.floor(totalIncome.wood * 0.5);
+      if ((p.mineStock ?? 0) < 80) totalIncome.iron = Math.floor(totalIncome.iron * 0.5);
+      // langsame Regenerierung
+      p.forestStock = Math.min(1200, (p.forestStock ?? 0) + 1);
+    }
   }
 
   const allUnits = save.armies.flatMap((a) => a.units);
@@ -642,6 +707,7 @@ export const localApi = {
     p.population += 500;
     p.prosperity += 15;
     save.kingdom.fame += 5;
+    ensureProvinceDev(p);
     return persist(userId, save);
   },
 
@@ -711,6 +777,7 @@ export const localApi = {
       if (!target.castle) target.castle = { level: 1 };
       if (!target.village) target.village = { level: 1 };
       if (!target.city) target.city = { level: 0 };
+      ensureProvinceDev(target);
       save.kingdom.fame += wasEnemy ? 10 : 5;
     }
 
@@ -725,6 +792,70 @@ export const localApi = {
     save.battles.unshift(battle);
 
     return { battle, result, gameState: persist(userId, save) };
+  },
+
+  async upgradeVillage(data: { provinceId: string }) {
+    const { userId, save } = requireSave();
+    const p = save.provinces.find((x) => x.id === data.provinceId);
+    if (!p || p.ownerId !== save.kingdom.id) throw new Error('Provinz gehört dir nicht');
+    if (!p.village) throw new Error('Kein Dorf');
+    const next = p.village.level + 1;
+    if (next > 5) throw new Error('Maximales Dorflevel');
+    const cost = { gold: 80 * next, food: 40 * next, wood: 60 * next, stone: 40 * next, iron: 10 * next };
+    if (!canAfford(save.kingdom, cost)) throw new Error('Nicht genügend Ressourcen');
+    Object.assign(save.kingdom, subtractResources(save.kingdom, cost));
+    p.village.level = next;
+    p.population += 200;
+    p.prosperity += 5;
+    ensureProvinceDev(p);
+    return persist(userId, save);
+  },
+
+  async placeCityTile(data: { provinceId: string; x: number; y: number; kind: string }) {
+    const { userId, save } = requireSave();
+    const p = save.provinces.find((x) => x.id === data.provinceId);
+    if (!p || p.ownerId !== save.kingdom.id) throw new Error('Provinz gehört dir nicht');
+    ensureProvinceDev(p);
+    const kind = data.kind as CityTileKind;
+    const def = CITY_TILE_DEFS[kind];
+    if (!def || kind === CityTileKind.EMPTY) throw new Error('Ungültiges Gebäude');
+    const cityLevel = p.city?.level ?? 0;
+    if (cityLevel < def.minCityLevel) {
+      throw new Error(`Benötigt Stadtstufe ${def.minCityLevel}`);
+    }
+    const tile = p.cityGrid!.find((t) => t.x === data.x && t.y === data.y);
+    if (!tile) throw new Error('Feld außerhalb der Stadt');
+    if (tile.kind !== CityTileKind.EMPTY && kind !== CityTileKind.ROAD) {
+      throw new Error('Feld ist belegt – erst abreißen');
+    }
+    const cost = {
+      gold: def.cost.gold,
+      food: def.cost.food ?? 0,
+      wood: def.cost.wood,
+      stone: def.cost.stone,
+      iron: def.cost.iron,
+    };
+    if (!canAfford(save.kingdom, cost)) throw new Error('Nicht genügend Ressourcen');
+    Object.assign(save.kingdom, subtractResources(save.kingdom, cost));
+    tile.kind = kind;
+    tile.level = 1;
+    if (def.district === 'verteidigung') {
+      p.defense += kind === CityTileKind.TOWER ? 5 : kind === CityTileKind.WALL ? 2 : 3;
+    }
+    return persist(userId, save);
+  },
+
+  async demolishCityTile(data: { provinceId: string; x: number; y: number }) {
+    const { userId, save } = requireSave();
+    const p = save.provinces.find((x) => x.id === data.provinceId);
+    if (!p || p.ownerId !== save.kingdom.id) throw new Error('Provinz gehört dir nicht');
+    ensureProvinceDev(p);
+    const tile = p.cityGrid!.find((t) => t.x === data.x && t.y === data.y);
+    if (!tile || tile.kind === CityTileKind.EMPTY) throw new Error('Nichts zum Abreißen');
+    if (tile.kind === CityTileKind.CASTLE_KEEP) throw new Error('Burgfried kann nicht abgerissen werden');
+    tile.kind = CityTileKind.EMPTY;
+    tile.level = 1;
+    return persist(userId, save);
   },
 
   async getDynasty(): Promise<DynastyInfo> {

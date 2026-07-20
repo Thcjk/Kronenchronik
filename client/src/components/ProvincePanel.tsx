@@ -41,6 +41,7 @@ interface ProvincePanelProps {
   onUpdate: (state: GameState) => void;
   onBattleResult: (result: BattleResult) => void;
   onClose?: () => void;
+  onEnterCity?: () => void;
 }
 
 export default function ProvincePanel({
@@ -49,6 +50,7 @@ export default function ProvincePanel({
   onUpdate,
   onBattleResult,
   onClose,
+  onEnterCity,
 }: ProvincePanelProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -161,6 +163,34 @@ export default function ProvincePanel({
       {isOwned && (
         <div className="space-y-3 border-t border-medieval-brown/30 pt-3">
           <h3 className="font-semibold text-medieval-gold">Verwaltung</h3>
+
+          {onEnterCity && (
+            <button type="button" onClick={onEnterCity} className="btn-primary w-full text-sm">
+              🏙️ Stadt betreten – bauen & planen
+            </button>
+          )}
+
+          {province.devStats && (
+            <div className="grid grid-cols-3 gap-1 text-[10px]">
+              <div className="bg-black/40 rounded p-1 text-center">
+                😊 {province.devStats.satisfaction}
+              </div>
+              <div className="bg-black/40 rounded p-1 text-center">
+                🛡️ {province.devStats.loyalty}
+              </div>
+              <div className="bg-black/40 rounded p-1 text-center">
+                ❤️ {province.devStats.health}
+              </div>
+            </div>
+          )}
+
+          <button
+            disabled={loading}
+            onClick={() => handleAction(() => api.upgradeVillage({ provinceId: province.id }))}
+            className="btn-secondary w-full text-sm"
+          >
+            Dorf ausbauen (St. {province.village?.level ?? 1})
+          </button>
 
           <button
             disabled={loading}
