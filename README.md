@@ -19,12 +19,17 @@ Mittelalter-Strategiespiel – **direkt im Browser**, ohne Server, ohne Installa
 
 - **CK3-Stil-Weltkarte** mit Terrain, Flüssen, Reichsgrenzen (Zoom & Verschieben)
 - **Stadtansicht**: Gebäude & Straßen frei platzieren, Produktionsketten
+- **Lebendige KI-Reiche** mit Persönlichkeiten, Wirtschaft und Expansion
+- Diplomatie, Belagerungen, Spione, Zufallsereignisse und **Chronik**
+- **Dynastie & Hof**: Heirat, Erziehung, Berater, Titel (Graf→Kaiser), Rollenspiel-Entscheidungen
+- **Großes Königreich**: Vasallen, Gesetze, Forschung, Weltwunder, Flotten, Piraten, Religion, Bürgerkriege
+- **Gesellschaft**: Adel, Fraktionen, Spione, Quests, Turniere, Söldner, Helden, Weltmarkt, Jahreszeiten
+- **Endgame & Codex**: Invasionen, Krisen, Weltgeschichte, Erfolge, Statistik, Spielgeschwindigkeit, Multi-Saves
 - Charakter-Panel mit Porträt, Eigenschaften und Fähigkeiten
 - Burgen, Städte, Dörfer ausbauen, Armeen auf der Karte
-- Schlachten & Provinzen erobern
-- Dynastien & automatisches Speichern
+- Dynastien, Thronfolge & automatisches Speichern
 
-Details Städtebau: [docs/cities.md](docs/cities.md)
+Details: [docs/cities.md](docs/cities.md) · [docs/phase2.md](docs/phase2.md) · [docs/phase3.md](docs/phase3.md) · [docs/phase4.md](docs/phase4.md) · [docs/phase5-part1.md](docs/phase5-part1.md) · [docs/phase5-part2.md](docs/phase5-part2.md) · [docs/phase5-part3.md](docs/phase5-part3.md)
 
 ---
 

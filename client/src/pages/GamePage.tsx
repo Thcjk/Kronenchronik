@@ -1,12 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api, type GameState, type Province, type BattleResult, isOfflineMode } from '../api/client';
-import { applyResourceTick } from '../local/localApi';
+import { applyResourceTick, getGameSpeedFromSession } from '../local/localApi';
+import { uiPollIntervalMs } from '@kronenchronik/shared';
 import { useGameSocket } from '../hooks/useGameSocket';
 import ResourceBar from '../components/ResourceBar';
 import WorldMap from '../components/WorldMap';
 import ProvincePanel from '../components/ProvincePanel';
 import CharacterPanel from '../components/CharacterPanel';
 import CityView from '../components/CityView';
+import IntroOverlay from '../components/IntroOverlay';
+import EventModal from '../components/EventModal';
+import AtmosphereAudio from '../components/AtmosphereAudio';
+import { buildIntroStory, INTRO_SEEN_KEY } from '../lore/intro';
 
 export default function GamePage() {
   const [gameState, setGameState] = useState<GameState | null>(null);
@@ -19,6 +24,7 @@ export default function GamePage() {
   const [showChar, setShowChar] = useState(true);
   const [showPanel, setShowPanel] = useState(true);
   const [cityViewId, setCityViewId] = useState<string | null>(null);
+  const [showIntro, setShowIntro] = useState(false);
 
   const loadGame = useCallback(async () => {
     try {
@@ -40,15 +46,47 @@ export default function GamePage() {
   }, [loadGame]);
 
   useEffect(() => {
+    if (!gameState) return;
+    const key = `${INTRO_SEEN_KEY}_${gameState.kingdom.id}`;
+    if (!localStorage.getItem(key)) {
+      setShowIntro(true);
+    }
+  }, [gameState]);
+
+  const dismissIntro = () => {
+    if (gameState) {
+      localStorage.setItem(`${INTRO_SEEN_KEY}_${gameState.kingdom.id}`, '1');
+    }
+    setShowIntro(false);
+  };
+
+  useEffect(() => {
     if (!isOfflineMode) return;
-    const id = setInterval(() => {
-      const session = localStorage.getItem('kronenchronik_session');
-      if (!session) return;
-      const state = applyResourceTick(session);
-      if (state) setGameState(state);
-    }, 30000);
-    return () => clearInterval(id);
-  }, []);
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+
+    const loop = () => {
+      if (cancelled) return;
+      const speed = getGameSpeedFromSession();
+      const ms = uiPollIntervalMs(speed);
+      timer = setTimeout(() => {
+        if (cancelled) return;
+        if (speed !== 'pause') {
+          const session = localStorage.getItem('kronenchronik_session');
+          if (session) {
+            const state = applyResourceTick(session);
+            if (state) setGameState(state);
+          }
+        }
+        loop();
+      }, ms);
+    };
+    loop();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [gameState?.endgame?.settings.speed]);
 
   useGameSocket({
     onGameStateUpdate: (state) => setGameState(state),
@@ -128,11 +166,47 @@ export default function GamePage() {
 
   return (
     <div className="h-full flex flex-col relative">
+      {showIntro && gameState && (
+        <IntroOverlay
+          rulerName={gameState.dynasty.ruler?.name ?? 'Herrscher'}
+          kingdomName={gameState.kingdom.name}
+          dynastyName={gameState.dynasty.dynasty?.name ?? 'Haus'}
+          startProvince={gameState.provinces.find((p) => p.isOwned)?.name ?? 'Grenzgrafschaft'}
+          story={buildIntroStory({
+            rulerName: gameState.dynasty.ruler?.name ?? 'Herrscher',
+            kingdomName: gameState.kingdom.name,
+            dynastyName: gameState.dynasty.dynasty?.name ?? 'Haus',
+            startProvince: gameState.provinces.find((p) => p.isOwned)?.name ?? 'Grenzgrafschaft',
+          })}
+          onContinue={dismissIntro}
+        />
+      )}
+
       {/* Ressourcen-HUD oben */}
       <div className="shrink-0 px-3 py-1.5 bg-black/40 border-b border-gold/20 flex flex-wrap items-center justify-between gap-2">
-        <div className="font-display text-sm text-gold truncate">{gameState.kingdom.name}</div>
+        <div className="font-display text-sm text-gold truncate">
+          {gameState.kingdom.name}
+          {gameState.worldYear ? (
+            <span className="text-parchment/50 font-sans text-[10px] ml-2">Anno {gameState.worldYear}</span>
+          ) : null}
+        </div>
         <ResourceBar resources={gameState.kingdom.resources} />
-        <div className="flex gap-1">
+        <div className="flex gap-1 flex-wrap">
+          {(['pause', 'normal', 'fast', 'very_fast'] as const).map((sp) => (
+            <button
+              key={sp}
+              type="button"
+              title="Spielgeschwindigkeit"
+              className={`btn-secondary text-[10px] py-1 ${
+                gameState.endgame?.settings.speed === sp ? 'border-gold text-gold' : ''
+              }`}
+              onClick={() => {
+                void api.setGameSpeed({ speed: sp }).then(handleUpdate);
+              }}
+            >
+              {sp === 'pause' ? '⏸' : sp === 'normal' ? '▶' : sp === 'fast' ? '⏩' : '⏭'}
+            </button>
+          ))}
           <button
             type="button"
             className={`btn-secondary text-[10px] py-1 ${mapMode === 'political' ? 'border-gold text-gold' : ''}`}
@@ -153,6 +227,16 @@ export default function GamePage() {
         </div>
       </div>
 
+      {gameState.worldAlert && (
+        <div className="shrink-0 px-3 py-1.5 bg-amber-950/50 border-b border-amber-600/40 text-amber-100 text-xs">
+          {gameState.worldAlert}
+        </div>
+      )}
+
+      {gameState.pendingEvents && gameState.pendingEvents.length > 0 && (
+        <EventModal gameState={gameState} onUpdate={handleUpdate} />
+      )}
+
       {/* Vollbild-Karte + Overlays */}
       <div className="flex-1 min-h-0 relative">
         <WorldMap
@@ -161,12 +245,22 @@ export default function GamePage() {
           selectedId={selectedProvince?.id ?? null}
           onSelect={handleSelect}
           mapMode={mapMode}
+          season={gameState.society?.climate.season}
+          weather={gameState.society?.climate.weather}
         />
+        <AtmosphereAudio mood={gameState.society?.atmosphere} enabled />
 
         {/* Charakter links (CK3-Stil) */}
         {showChar && gameState.dynasty && (
           <div className="absolute top-2 left-2 z-30 w-[min(100%-1rem,280px)] max-h-[calc(100%-1rem)] overflow-y-auto side-drawer">
-            <CharacterPanel dynasty={gameState.dynasty} compact onClose={() => setShowChar(false)} />
+            <CharacterPanel
+              dynasty={gameState.dynasty}
+              compact
+              kingdomName={gameState.kingdom.name}
+              title={gameState.title}
+              titleHint={gameState.titleHint}
+              onClose={() => setShowChar(false)}
+            />
           </div>
         )}
 

@@ -30,6 +30,19 @@ export enum CityTileKind {
   VINEYARD = 'VINEYARD',
   PALACE = 'PALACE',
   CASTLE_KEEP = 'CASTLE_KEEP',
+  SHEEP_FARM = 'SHEEP_FARM',
+  WEAVER = 'WEAVER',
+  TAILOR = 'TAILOR',
+  BREWERY = 'BREWERY',
+  FISHERY = 'FISHERY',
+  CHARCOAL_KILN = 'CHARCOAL_KILN',
+  FOUNDRY = 'FOUNDRY',
+  ARMORER = 'ARMORER',
+  SCHOOL = 'SCHOOL',
+  UNIVERSITY = 'UNIVERSITY',
+  CATHEDRAL = 'CATHEDRAL',
+  TOWN_HALL = 'TOWN_HALL',
+  NOBLE_HOUSE = 'NOBLE_HOUSE',
 }
 
 export type CityDistrict =
@@ -289,6 +302,123 @@ export const CITY_TILE_DEFS: Record<CityTileKind, CityTileDef> = {
     minCityLevel: 0,
     category: 'building',
   },
+  [CityTileKind.SHEEP_FARM]: {
+    kind: CityTileKind.SHEEP_FARM,
+    name: 'Schäferei',
+    icon: '🐑',
+    district: 'landwirtschaft',
+    cost: { gold: 30, wood: 25, stone: 5, iron: 0, food: 10 },
+    minCityLevel: 0,
+    category: 'field',
+  },
+  [CityTileKind.WEAVER]: {
+    kind: CityTileKind.WEAVER,
+    name: 'Weberei',
+    icon: '🧵',
+    district: 'industrie',
+    cost: { gold: 45, wood: 30, stone: 15, iron: 5 },
+    minCityLevel: 1,
+    category: 'building',
+  },
+  [CityTileKind.TAILOR]: {
+    kind: CityTileKind.TAILOR,
+    name: 'Schneiderei',
+    icon: '👔',
+    district: 'handel',
+    cost: { gold: 50, wood: 25, stone: 15, iron: 5 },
+    minCityLevel: 1,
+    category: 'building',
+  },
+  [CityTileKind.BREWERY]: {
+    kind: CityTileKind.BREWERY,
+    name: 'Brauerei',
+    icon: '🍺',
+    district: 'handel',
+    cost: { gold: 55, wood: 40, stone: 30, iron: 5 },
+    minCityLevel: 1,
+    category: 'building',
+  },
+  [CityTileKind.FISHERY]: {
+    kind: CityTileKind.FISHERY,
+    name: 'Fischerei',
+    icon: '🐟',
+    district: 'hafen',
+    cost: { gold: 35, wood: 40, stone: 10, iron: 0 },
+    minCityLevel: 0,
+    category: 'field',
+  },
+  [CityTileKind.CHARCOAL_KILN]: {
+    kind: CityTileKind.CHARCOAL_KILN,
+    name: 'Köhlerei',
+    icon: '🔥',
+    district: 'industrie',
+    cost: { gold: 30, wood: 50, stone: 10, iron: 0 },
+    minCityLevel: 0,
+    category: 'building',
+  },
+  [CityTileKind.FOUNDRY]: {
+    kind: CityTileKind.FOUNDRY,
+    name: 'Schmelzofen',
+    icon: '🏭',
+    district: 'industrie',
+    cost: { gold: 90, wood: 40, stone: 80, iron: 30 },
+    minCityLevel: 2,
+    category: 'building',
+  },
+  [CityTileKind.ARMORER]: {
+    kind: CityTileKind.ARMORER,
+    name: 'Rüstungsschmiede',
+    icon: '🛡️',
+    district: 'militar',
+    cost: { gold: 80, wood: 30, stone: 50, iron: 40 },
+    minCityLevel: 2,
+    category: 'building',
+  },
+  [CityTileKind.SCHOOL]: {
+    kind: CityTileKind.SCHOOL,
+    name: 'Schule',
+    icon: '📚',
+    district: 'wohn',
+    cost: { gold: 60, wood: 40, stone: 40, iron: 5 },
+    minCityLevel: 1,
+    category: 'building',
+  },
+  [CityTileKind.UNIVERSITY]: {
+    kind: CityTileKind.UNIVERSITY,
+    name: 'Universität',
+    icon: '🎓',
+    district: 'wohn',
+    cost: { gold: 250, wood: 80, stone: 200, iron: 40 },
+    minCityLevel: 4,
+    category: 'building',
+  },
+  [CityTileKind.CATHEDRAL]: {
+    kind: CityTileKind.CATHEDRAL,
+    name: 'Kathedrale',
+    icon: '⛪',
+    district: 'tempel',
+    cost: { gold: 280, wood: 60, stone: 300, iron: 30 },
+    minCityLevel: 4,
+    category: 'building',
+  },
+  [CityTileKind.TOWN_HALL]: {
+    kind: CityTileKind.TOWN_HALL,
+    name: 'Rathaus',
+    icon: '🏛️',
+    district: 'wohn',
+    cost: { gold: 120, wood: 50, stone: 100, iron: 20 },
+    minCityLevel: 2,
+    category: 'building',
+  },
+  [CityTileKind.NOBLE_HOUSE]: {
+    kind: CityTileKind.NOBLE_HOUSE,
+    name: 'Adelshaus',
+    icon: '👑',
+    district: 'wohn',
+    cost: { gold: 100, wood: 60, stone: 80, iron: 15 },
+    minCityLevel: 3,
+    category: 'building',
+  },
 };
 
 export interface CityTile {
@@ -296,6 +426,8 @@ export interface CityTile {
   y: number;
   kind: CityTileKind;
   level: number;
+  /** Verbleibende Ticks bis Fertigstellung (0/undefined = fertig) */
+  buildRemaining?: number;
 }
 
 export function createEmptyCityGrid(): CityTile[] {
@@ -344,20 +476,26 @@ export function countKind(tiles: CityTile[], kind: CityTileKind): number {
   return tiles.filter((t) => t.kind === kind).length;
 }
 
-/** Visuelles Stadtlevel 1–5 aus Gebäuden + Stadtstufe */
+/** Visuelles Stadtlevel 1–7 aus Gebäuden + Stadtstufe (+ Hauptstadt) */
 export function computeSettlementVisualLevel(
   tiles: CityTile[],
   cityLevel: number,
   villageLevel: number,
+  isCapital = false,
 ): number {
   const buildings = tiles.filter(
-    (t) => t.kind !== CityTileKind.EMPTY && t.kind !== CityTileKind.ROAD,
+    (t) =>
+      t.kind !== CityTileKind.EMPTY &&
+      t.kind !== CityTileKind.ROAD &&
+      !(t.buildRemaining && t.buildRemaining > 0),
   ).length;
-  if (cityLevel >= 5 || buildings >= 40) return 5;
-  if (cityLevel >= 4 || buildings >= 28) return 4;
-  if (cityLevel >= 3 || buildings >= 18) return 3;
-  if (cityLevel >= 1 || buildings >= 10) return 2;
-  if (villageLevel >= 1 || buildings >= 5) return 1;
+  if (isCapital && (cityLevel >= 5 || buildings >= 42)) return 7;
+  if (cityLevel >= 5 || buildings >= 36) return 6;
+  if (cityLevel >= 4 || buildings >= 28) return 5;
+  if (cityLevel >= 3 || buildings >= 20) return 4;
+  if (cityLevel >= 2 || buildings >= 14) return 3;
+  if (cityLevel >= 1 || buildings >= 8) return 2;
+  if (villageLevel >= 1 || buildings >= 4) return 1;
   return 1;
 }
 
@@ -366,62 +504,126 @@ export const SETTLEMENT_VISUAL: Record<
   { title: string; description: string; sky: string; ground: string }
 > = {
   1: {
-    title: 'Kleines Dorf',
-    description: 'Wenige Holzhäuser, Brunnen, kleine Felder',
+    title: 'Dorf',
+    description: 'Kleine Holzburg, wenige Häuser, kleiner Marktplatz',
     sky: '#3a4a5a',
     ground: '#3d5a32',
   },
   2: {
-    title: 'Wachsendes Dorf',
-    description: 'Werkstätten, kleiner Markt, Holzzaun',
+    title: 'Siedlung',
+    description: 'Werkstätten, Holzzaun, wachsende Felder',
     sky: '#3a5060',
     ground: '#3a5830',
   },
   3: {
-    title: 'Marktstadt',
-    description: 'Steinhäuser, Kirche, breitere Straßen',
+    title: 'Marktflecken',
+    description: 'Steinburg, Kirche, Handelsbuden',
     sky: '#3a5570',
     ground: '#355828',
   },
   4: {
-    title: 'Große Stadt',
-    description: 'Stadtmauer, Handelsviertel, Werkstätten',
+    title: 'Kleinstadt',
+    description: 'Stadtmauer, Viertel, breitere Straßen',
+    sky: '#2f4a68',
+    ground: '#325528',
+  },
+  5: {
+    title: 'Großstadt',
+    description: 'Handelszentrum, Türme, große Werkstätten',
     sky: '#2a4060',
     ground: '#304e28',
   },
-  5: {
-    title: 'Hauptstadt',
-    description: 'Kathedrale, Schloss, Universität, große Mauern',
+  6: {
+    title: 'Herzogssitz',
+    description: 'Palast, Universität, Kathedrale im Bau',
     sky: '#243858',
     ground: '#2a4820',
   },
+  7: {
+    title: 'Königliche Hauptstadt',
+    description: 'Palast, mehrere Mauerringe, monumentale Plätze',
+    sky: '#1c2e4a',
+    ground: '#243c1c',
+  },
 };
 
-/** Bau-Palette (ohne EMPTY) */
-export const BUILD_PALETTE: CityTileKind[] = [
-  CityTileKind.ROAD,
-  CityTileKind.HOUSE,
-  CityTileKind.WELL,
-  CityTileKind.FARM,
-  CityTileKind.WINDMILL,
-  CityTileKind.VINEYARD,
-  CityTileKind.MILL,
-  CityTileKind.BAKERY,
-  CityTileKind.LUMBER_CAMP,
-  CityTileKind.SAWMILL,
-  CityTileKind.WORKSHOP,
-  CityTileKind.MINE,
-  CityTileKind.QUARRY,
-  CityTileKind.SMITHY,
-  CityTileKind.MARKET,
-  CityTileKind.WAREHOUSE,
-  CityTileKind.CHURCH,
-  CityTileKind.BARRACKS,
-  CityTileKind.STABLES,
-  CityTileKind.WALL,
-  CityTileKind.TOWER,
-  CityTileKind.GATE,
-  CityTileKind.HARBOR,
-  CityTileKind.PALACE,
-  CityTileKind.CASTLE_KEEP,
+export const BUILD_CATEGORIES: { id: string; label: string; kinds: CityTileKind[] }[] = [
+  {
+    id: 'wohn',
+    label: 'Wohnen',
+    kinds: [CityTileKind.HOUSE, CityTileKind.NOBLE_HOUSE, CityTileKind.WELL, CityTileKind.PALACE],
+  },
+  {
+    id: 'land',
+    label: 'Landwirtschaft',
+    kinds: [
+      CityTileKind.FARM,
+      CityTileKind.VINEYARD,
+      CityTileKind.SHEEP_FARM,
+      CityTileKind.FISHERY,
+      CityTileKind.WINDMILL,
+    ],
+  },
+  {
+    id: 'prod',
+    label: 'Rohstoffe',
+    kinds: [
+      CityTileKind.LUMBER_CAMP,
+      CityTileKind.MINE,
+      CityTileKind.QUARRY,
+      CityTileKind.CHARCOAL_KILN,
+    ],
+  },
+  {
+    id: 'proc',
+    label: 'Verarbeitung',
+    kinds: [
+      CityTileKind.MILL,
+      CityTileKind.BAKERY,
+      CityTileKind.BREWERY,
+      CityTileKind.SAWMILL,
+      CityTileKind.WORKSHOP,
+      CityTileKind.WEAVER,
+      CityTileKind.TAILOR,
+      CityTileKind.FOUNDRY,
+      CityTileKind.SMITHY,
+      CityTileKind.ARMORER,
+    ],
+  },
+  {
+    id: 'handel',
+    label: 'Handel',
+    kinds: [CityTileKind.MARKET, CityTileKind.WAREHOUSE, CityTileKind.HARBOR],
+  },
+  {
+    id: 'mil',
+    label: 'Militär',
+    kinds: [
+      CityTileKind.BARRACKS,
+      CityTileKind.STABLES,
+      CityTileKind.WALL,
+      CityTileKind.TOWER,
+      CityTileKind.GATE,
+      CityTileKind.CASTLE_KEEP,
+    ],
+  },
+  {
+    id: 'rel',
+    label: 'Religion & Bildung',
+    kinds: [
+      CityTileKind.CHURCH,
+      CityTileKind.CATHEDRAL,
+      CityTileKind.SCHOOL,
+      CityTileKind.UNIVERSITY,
+      CityTileKind.TOWN_HALL,
+    ],
+  },
+  {
+    id: 'infra',
+    label: 'Straßen',
+    kinds: [CityTileKind.ROAD],
+  },
 ];
+
+/** Bau-Palette (ohne EMPTY) */
+export const BUILD_PALETTE: CityTileKind[] = BUILD_CATEGORIES.flatMap((c) => c.kinds);
