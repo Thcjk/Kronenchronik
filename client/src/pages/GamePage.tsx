@@ -6,6 +6,7 @@ import ResourceBar from '../components/ResourceBar';
 import WorldMap from '../components/WorldMap';
 import ProvincePanel from '../components/ProvincePanel';
 import CharacterPanel from '../components/CharacterPanel';
+import CityView from '../components/CityView';
 
 export default function GamePage() {
   const [gameState, setGameState] = useState<GameState | null>(null);
@@ -17,6 +18,7 @@ export default function GamePage() {
   const [mapMode, setMapMode] = useState<'terrain' | 'political'>('political');
   const [showChar, setShowChar] = useState(true);
   const [showPanel, setShowPanel] = useState(true);
+  const [cityViewId, setCityViewId] = useState<string | null>(null);
 
   const loadGame = useCallback(async () => {
     try {
@@ -101,6 +103,29 @@ export default function GamePage() {
     return <div className="h-full flex items-center justify-center text-red-400">{error || 'Kein Spielstand'}</div>;
   }
 
+  const cityProvince = cityViewId
+    ? gameState.provinces.find((p) => p.id === cityViewId)
+    : null;
+
+  if (cityProvince && cityProvince.isOwned) {
+    return (
+      <div className="h-full flex flex-col">
+        <div className="shrink-0 px-3 py-1.5 bg-black/40 border-b border-gold/20 flex flex-wrap items-center justify-between gap-2">
+          <div className="font-display text-sm text-gold truncate">{gameState.kingdom.name}</div>
+          <ResourceBar resources={gameState.kingdom.resources} />
+        </div>
+        <div className="flex-1 min-h-0">
+          <CityView
+            province={cityProvince}
+            gameState={gameState}
+            onUpdate={handleUpdate}
+            onBack={() => setCityViewId(null)}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-full flex flex-col relative">
       {/* Ressourcen-HUD oben */}
@@ -154,6 +179,7 @@ export default function GamePage() {
               onUpdate={handleUpdate}
               onBattleResult={setBattleResult}
               onClose={() => setShowPanel(false)}
+              onEnterCity={() => setCityViewId(selectedProvince.id)}
             />
           </div>
         )}
