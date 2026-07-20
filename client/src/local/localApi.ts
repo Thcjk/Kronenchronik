@@ -38,6 +38,7 @@ import {
   createSiege,
   stormAttackerBonus,
   resolveEventChoice,
+  resolveImmersionChoice,
   relationLabel,
   personalityLabel,
   WAR_REASONS,
@@ -69,6 +70,17 @@ import {
   spawnAiKingdoms,
   type SimWorld,
 } from './worldSim';
+import {
+  arrangeMarriage,
+  assignCouncil,
+  getCouncilSuggestions,
+  migrateDynastyState,
+  refreshSpouseCandidates,
+  runDynastyTick,
+  setEducation,
+  titleProgressHint,
+  type DynastySimState,
+} from './dynastySim';
 
 const USERS_KEY = 'kronenchronik_users';
 const SESSION_KEY = 'kronenchronik_session';
@@ -161,6 +173,8 @@ interface GameSave {
   goals?: LongTermGoal[];
   playerSpies?: number;
   lastWorldAlert?: string;
+  /** Phase 4 – Dynastie & Hof */
+  dynastySim?: DynastySimState;
 }
 
 function saveKey(userId: string) {
@@ -266,6 +280,36 @@ function ensureWorldFields(save: GameSave) {
       a.kingdomId = owner ?? save.kingdom.id;
     }
   }
+  ensureDynastySim(save);
+}
+
+function ensureDynastySim(save: GameSave) {
+  const capital =
+    save.provinces.find((p) => p.id === save.capitalProvinceId)?.name ??
+    save.provinces.find((p) => p.ownerId === save.kingdom.id)?.name ??
+    'Grenzburg';
+  const d = save.dynasty;
+  save.dynastySim = migrateDynastyState({
+    dynastyId: d.dynasty?.id ?? uid(),
+    dynastyName: d.dynasty?.name ?? `Haus ${save.kingdom.name}`,
+    motto: d.dynasty?.motto ?? null,
+    characters: (d.characters ?? []) as unknown as Array<Record<string, unknown>>,
+    tickCount: save.tickCount ?? 0,
+    birthPlace: capital,
+    existing: save.dynastySim,
+  });
+  // Sync zurück in DynastyInfo (UI-Kompatibilität)
+  const sim = save.dynastySim;
+  save.dynasty = {
+    dynasty: {
+      id: sim.meta.id,
+      name: sim.meta.name,
+      motto: sim.meta.motto,
+    },
+    characters: sim.characters,
+    ruler: sim.characters.find((c) => c.isRuler) ?? null,
+    heir: sim.characters.find((c) => c.isHeir) ?? null,
+  };
 }
 
 function toSimWorld(save: GameSave): SimWorld {
@@ -614,6 +658,24 @@ function toGameState(save: GameSave): GameState {
     goals: save.goals ?? [],
     playerSpies: save.playerSpies ?? 1,
     worldAlert: save.lastWorldAlert,
+    title: save.dynastySim?.title,
+    titleHint: save.dynastySim
+      ? titleProgressHint(
+          save.dynastySim,
+          save.provinces.filter((p) => p.ownerId === kid).length,
+          save.kingdom.fame,
+        )
+      : null,
+    court: save.dynastySim
+      ? {
+          visitors: save.dynastySim.visitors,
+          council: save.dynastySim.council,
+          councilAdvice: getCouncilSuggestions(save.dynastySim),
+          marriages: save.dynastySim.marriages,
+          spouseCandidates: save.dynastySim.spouseCandidates,
+          meta: save.dynastySim.meta,
+        }
+      : undefined,
   };
 }
 
@@ -730,7 +792,42 @@ export function applyResourceTick(userId: string): GameState | null {
   const sim = toSimWorld(save);
   const alerts = simulateWorldTick(sim);
   fromSimWorld(save, sim);
-  if (alerts.warAlert) save.lastWorldAlert = alerts.warAlert;
+
+  // Phase 4: Dynastie & Hof
+  ensureDynastySim(save);
+  const ownedCount = save.provinces.filter((p) => p.ownerId === save.kingdom.id).length;
+  const capitalName =
+    save.provinces.find((p) => p.id === save.capitalProvinceId)?.name ??
+    save.provinces.find((p) => p.ownerId === save.kingdom.id)?.name ??
+    'Hauptstadt';
+  const dyn = runDynastyTick({
+    state: save.dynastySim!,
+    tickCount: save.tickCount ?? 0,
+    provinceCount: ownedCount,
+    fame: save.kingdom.fame,
+    kingdomName: save.kingdom.name,
+    capitalName,
+    pendingEvents: save.pendingEvents ?? [],
+  });
+  save.dynastySim = dyn.state;
+  save.chronicle = [...(save.chronicle ?? []), ...dyn.chronicle];
+  if (dyn.newEvents.length && (save.pendingEvents?.length ?? 0) === 0) {
+    save.pendingEvents = dyn.newEvents;
+  }
+  // Sync dynasty info
+  save.dynasty = {
+    dynasty: {
+      id: dyn.state.meta.id,
+      name: dyn.state.meta.name,
+      motto: dyn.state.meta.motto,
+    },
+    characters: dyn.state.characters,
+    ruler: dyn.state.characters.find((c) => c.isRuler) ?? null,
+    heir: dyn.state.characters.find((c) => c.isHeir) ?? null,
+  };
+
+  if (dyn.successionMsg) save.lastWorldAlert = dyn.successionMsg;
+  else if (alerts.warAlert) save.lastWorldAlert = alerts.warAlert;
   else if (alerts.successionMsg) save.lastWorldAlert = alerts.successionMsg;
   else save.lastWorldAlert = undefined;
 
@@ -1151,6 +1248,41 @@ export const localApi = {
     ensureWorldFields(save);
     const ev = save.pendingEvents!.find((e) => e.id === data.eventId);
     if (!ev) throw new Error('Ereignis nicht gefunden');
+
+    // Immersion / Hof-Ereignisse (Phase 4)
+    if (ev.templateId.startsWith('immersion:')) {
+      const effect = resolveImmersionChoice(ev.templateId, data.choiceId);
+      if (!effect) throw new Error('Ungültige Wahl');
+      save.kingdom.gold = Math.max(0, save.kingdom.gold + (effect.gold ?? 0));
+      save.kingdom.food = Math.max(0, save.kingdom.food + (effect.food ?? 0));
+      save.kingdom.influence += effect.influence ?? 0;
+      save.kingdom.fame += effect.fame ?? 0;
+      if (save.dynastySim) {
+        const ruler = save.dynastySim.characters.find((c) => c.isRuler);
+        if (ruler) {
+          ruler.prestige += effect.prestige ?? 0;
+          ruler.stress = Math.max(0, Math.min(100, ruler.stress + (effect.stress ?? 0)));
+          if (effect.loyaltyAll) {
+            for (const c of save.dynastySim.characters) {
+              if (!c.isRuler) c.loyalty = Math.max(0, Math.min(100, (c.loyalty ?? 50) + effect.loyaltyAll));
+            }
+          }
+        }
+        save.dynastySim.meta.prestige += effect.prestige ?? 0;
+      }
+      save.chronicle!.push(
+        makeChronicle(
+          save.tickCount ?? 0,
+          'event',
+          effect.chronicleTitle ?? ev.title,
+          effect.chronicleText ?? `Entscheidung: ${data.choiceId}`,
+        ),
+      );
+      save.pendingEvents = save.pendingEvents!.filter((e) => e.id !== data.eventId);
+      ensureDynastySim(save);
+      return persist(userId, save);
+    }
+
     const effect = resolveEventChoice(ev.templateId, data.choiceId);
     if (!effect) throw new Error('Ungültige Wahl');
 
@@ -1191,7 +1323,6 @@ export const localApi = {
       );
     }
 
-    // Held als General
     if (ev.templateId === 'hero_appears' && data.choiceId === 'hire_general') {
       save.generals!.push({
         id: uid(),
@@ -1554,6 +1685,81 @@ export const localApi = {
     save.kingdom.gold += 15;
     storeSave(userId, save);
     return localApi.getDiplomacy();
+  },
+
+  async marry(data: { candidateId: string }) {
+    const { userId, save } = requireSave();
+    ensureWorldFields(save);
+    const ruler = save.dynastySim!.characters.find((c) => c.isRuler);
+    if (!ruler) throw new Error('Kein Herrscher');
+    const result = arrangeMarriage(save.dynastySim!, ruler.id, data.candidateId, save.tickCount ?? 0);
+    if ('error' in result) throw new Error(result.error);
+    save.dynastySim = result.state;
+    save.chronicle!.push(result.entry);
+    save.kingdom.fame += 5;
+    save.kingdom.influence += 5;
+    ensureDynastySim(save);
+    return persist(userId, save);
+  },
+
+  async seekMarriage() {
+    const { userId, save } = requireSave();
+    ensureWorldFields(save);
+    const capital =
+      save.provinces.find((p) => p.id === save.capitalProvinceId)?.name ?? 'Hof';
+    save.dynastySim = refreshSpouseCandidates(save.dynastySim!, save.tickCount ?? 0, capital);
+    ensureDynastySim(save);
+    return persist(userId, save);
+  },
+
+  async setEducation(data: { characterId: string; focus: string }) {
+    const { userId, save } = requireSave();
+    ensureWorldFields(save);
+    save.dynastySim = setEducation(
+      save.dynastySim!,
+      data.characterId,
+      data.focus as 'diplomacy' | 'war' | 'stewardship' | 'learning' | 'faith' | 'intrigue',
+    );
+    ensureDynastySim(save);
+    return persist(userId, save);
+  },
+
+  async assignCouncil(data: { role: string; characterId: string | null }) {
+    const { userId, save } = requireSave();
+    ensureWorldFields(save);
+    save.dynastySim = assignCouncil(
+      save.dynastySim!,
+      data.role as 'chancellor' | 'marshal' | 'steward' | 'spymaster' | 'chaplain' | 'builder',
+      data.characterId,
+    );
+    ensureDynastySim(save);
+    return persist(userId, save);
+  },
+
+  async hostTournament() {
+    const { userId, save } = requireSave();
+    ensureWorldFields(save);
+    if (save.kingdom.gold < 120) throw new Error('Nicht genug Gold (120)');
+    save.kingdom.gold -= 120;
+    save.kingdom.fame += 8;
+    if (save.dynastySim) {
+      const ruler = save.dynastySim.characters.find((c) => c.isRuler);
+      if (ruler) {
+        ruler.prestige += 12;
+        ruler.stress = Math.max(0, ruler.stress - 8);
+      }
+      save.dynastySim.meta.prestige += 12;
+    }
+    save.chronicle!.push(
+      makeChronicle(
+        save.tickCount ?? 0,
+        'event',
+        'Turnier',
+        'Ein großes Ritterturnier wurde ausgerichtet. Banner wehten über dem Hof.',
+      ),
+    );
+    ensureDynastySim(save);
+    return persist(userId, save);
   },
 };
 

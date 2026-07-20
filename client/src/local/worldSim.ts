@@ -708,44 +708,8 @@ function processSieges(world: SimWorld) {
 }
 
 function ageDynasties(world: SimWorld) {
-  // Alle 10 Ticks +1 Jahr
+  // Spieler-Dynastie wird in dynastySim gehandhabt (Phase 4)
   if (world.tickCount % 10 !== 0) return;
-
-  const ageChar = (c: { age: number; isAlive: boolean; isRuler: boolean; name: string; id: string }) => {
-    if (!c.isAlive) return;
-    c.age += 1;
-  };
-
-  for (const c of world.playerDynasty.characters) ageChar(c);
-  if (world.playerDynasty.ruler) ageChar(world.playerDynasty.ruler);
-  if (world.playerDynasty.heir) ageChar(world.playerDynasty.heir);
-
-  // Tod & Thronfolge Spieler
-  const ruler = world.playerDynasty.ruler;
-  if (ruler && ruler.isAlive && shouldRulerDieFromAge(ruler.age)) {
-    ruler.isAlive = false;
-    const heir = world.playerDynasty.heir;
-    if (heir && heir.isAlive) {
-      heir.isRuler = true;
-      heir.isHeir = false;
-      world.playerDynasty.ruler = { ...heir, isRuler: true, isHeir: false };
-      // Neuer Erbe
-      const child = makeCharacter(`${heir.name.split(' ')[0]}s Kind`, 5, { heir: true, traits: ['loyal'] });
-      world.playerDynasty.characters.push(child);
-      world.playerDynasty.heir = child;
-      world.playerDynasty.characters = world.playerDynasty.characters.map((c) =>
-        c.id === heir.id ? { ...c, isRuler: true, isHeir: false } : c.id === ruler.id ? { ...c, isAlive: false } : c,
-      );
-      world.chronicle.push(
-        makeChronicle(
-          world.tickCount,
-          'succession',
-          'Thronfolge',
-          `${ruler.name} starb im Alter von ${ruler.age}. ${heir.name} besteigt den Thron.`,
-        ),
-      );
-    }
-  }
 
   for (const k of world.aiKingdoms) {
     k.ageTick += 1;
@@ -770,7 +734,6 @@ function ageDynasties(world: SimWorld) {
     }
   }
 
-  // Generäle altern
   for (const g of world.generals) {
     if (g.alive) g.age += 1;
     if (g.age > 75 && Math.random() < 0.15) {

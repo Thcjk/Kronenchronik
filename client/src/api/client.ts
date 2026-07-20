@@ -129,6 +129,14 @@ const remoteApi = {
     request<GameState>('/game/general/assign', { method: 'POST', body: JSON.stringify(data) }),
   getChronicle: () =>
     request<{ entries: GameState['chronicle']; year: number; tickCount: number }>('/game/chronicle'),
+  marry: (data: { candidateId: string }) =>
+    request<GameState>('/game/dynasty/marry', { method: 'POST', body: JSON.stringify(data) }),
+  seekMarriage: () => request<GameState>('/game/dynasty/seek-marriage', { method: 'POST', body: '{}' }),
+  setEducation: (data: { characterId: string; focus: string }) =>
+    request<GameState>('/game/dynasty/education', { method: 'POST', body: JSON.stringify(data) }),
+  assignCouncil: (data: { role: string; characterId: string | null }) =>
+    request<GameState>('/game/dynasty/council', { method: 'POST', body: JSON.stringify(data) }),
+  hostTournament: () => request<GameState>('/game/dynasty/tournament', { method: 'POST', body: '{}' }),
 };
 
 import { localApi } from '../local/localApi';
@@ -193,6 +201,36 @@ export interface Character {
   diplomacy: number;
   stewardship: number;
   intrigue?: number;
+  firstName?: string;
+  lastName?: string;
+  title?: string;
+  nickname?: string;
+  birthYear?: number;
+  birthPlace?: string;
+  culture?: string;
+  religion?: string;
+  language?: string;
+  appearance?: {
+    portrait: string;
+    hair: string;
+    beard: string;
+    clothing: string;
+    armor?: string;
+    crown?: string;
+  };
+  renown?: number;
+  influence?: number;
+  energy?: number;
+  stress?: number;
+  learning?: number;
+  lifeStage?: string;
+  education?: string | null;
+  spouseId?: string | null;
+  fatherId?: string | null;
+  motherId?: string | null;
+  childrenIds?: string[];
+  councilRole?: string | null;
+  loyalty?: number;
 }
 
 export interface DynastyInfo {
@@ -414,6 +452,30 @@ export interface GameState {
   }>;
   playerSpies?: number;
   worldAlert?: string;
+  title?: { rank: string; formalTitle: string; provinceThreshold: number };
+  titleHint?: string | null;
+  court?: {
+    visitors: Array<{ id: string; name: string; kind: string; description: string }>;
+    council: Array<{ role: string; characterId: string | null; label: string }>;
+    councilAdvice: Array<{ role: string; label: string; advice: string }>;
+    marriages: Array<{ id: string; year: number; spouseAId: string; spouseBId: string }>;
+    spouseCandidates: Array<{
+      id: string;
+      name: string;
+      age: number;
+      traits?: string[];
+      diplomacy: number;
+    }>;
+    meta: {
+      id: string;
+      name: string;
+      motto: string | null;
+      prestige: number;
+      renown: number;
+      foundedYear: number;
+      famousMembers: string[];
+    };
+  };
 }
 
 export { ApiError };

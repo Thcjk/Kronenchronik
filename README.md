@@ -21,11 +21,12 @@ Mittelalter-Strategiespiel – **direkt im Browser**, ohne Server, ohne Installa
 - **Stadtansicht**: Gebäude & Straßen frei platzieren, Produktionsketten
 - **Lebendige KI-Reiche** mit Persönlichkeiten, Wirtschaft und Expansion
 - Diplomatie, Belagerungen, Spione, Zufallsereignisse und **Chronik**
+- **Dynastie & Hof**: Heirat, Erziehung, Berater, Titel (Graf→Kaiser), Rollenspiel-Entscheidungen
 - Charakter-Panel mit Porträt, Eigenschaften und Fähigkeiten
 - Burgen, Städte, Dörfer ausbauen, Armeen auf der Karte
 - Dynastien, Thronfolge & automatisches Speichern
 
-Details: [docs/cities.md](docs/cities.md) · [docs/phase2.md](docs/phase2.md) · [docs/phase3.md](docs/phase3.md)
+Details: [docs/cities.md](docs/cities.md) · [docs/phase2.md](docs/phase2.md) · [docs/phase3.md](docs/phase3.md) · [docs/phase4.md](docs/phase4.md)
 
 ---
 

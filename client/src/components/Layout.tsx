@@ -46,6 +46,14 @@ export default function Layout() {
               Chronik
             </NavLink>
             <NavLink
+              to="/court"
+              className={({ isActive }) =>
+                `px-2 py-1 text-xs sm:text-sm font-display transition-colors ${isActive ? 'text-gold' : 'text-parchment/70 hover:text-gold'}`
+              }
+            >
+              Hof
+            </NavLink>
+            <NavLink
               to="/profile"
               className={({ isActive }) =>
                 `px-2 py-1 text-xs sm:text-sm font-display transition-colors ${isActive ? 'text-gold' : 'text-parchment/70 hover:text-gold'}`

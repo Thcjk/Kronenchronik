@@ -220,6 +220,8 @@ export default function GamePage() {
               dynasty={gameState.dynasty}
               compact
               kingdomName={gameState.kingdom.name}
+              title={gameState.title}
+              titleHint={gameState.titleHint}
               onClose={() => setShowChar(false)}
             />
           </div>
