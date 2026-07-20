@@ -77,6 +77,12 @@ const remoteApi = {
     request<GameState>('/game/city/place', { method: 'POST', body: JSON.stringify(data) }),
   demolishCityTile: (data: { provinceId: string; x: number; y: number }) =>
     request<GameState>('/game/city/demolish', { method: 'POST', body: JSON.stringify(data) }),
+  upgradeCityTile: (data: { provinceId: string; x: number; y: number }) =>
+    request<GameState>('/game/city/upgrade-tile', { method: 'POST', body: JSON.stringify(data) }),
+  setProvinceTax: (data: { provinceId: string; taxRate: number }) =>
+    request<GameState>('/game/province/tax', { method: 'POST', body: JSON.stringify(data) }),
+  setCapital: (data: { provinceId: string }) =>
+    request<GameState>('/game/capital', { method: 'POST', body: JSON.stringify(data) }),
   attack: (data: { armyId: string; targetProvinceId: string }) =>
     request<{ battle: Battle; result: BattleResult; gameState: GameState }>('/game/attack', {
       method: 'POST',
@@ -213,13 +219,14 @@ export interface Province {
   ownerId: string | null;
   ownerName: string | null;
   isOwned: boolean;
+  isCapital?: boolean;
   castle: { level: number } | null;
   village: { level: number } | null;
   city: { level: number } | null;
   buildings: Array<{ id: string; type: string; level: number }>;
   armies: Army[];
   neighbors: Array<{ id: string; slug: string; name: string }>;
-  cityGrid?: Array<{ x: number; y: number; kind: string; level: number }>;
+  cityGrid?: Array<{ x: number; y: number; kind: string; level: number; buildRemaining?: number }>;
   devStats?: {
     satisfaction: number;
     loyalty: number;
@@ -227,6 +234,7 @@ export interface Province {
     crime: number;
     health: number;
     education: number;
+    taxRate?: number;
     stock: {
       grain: number;
       flour: number;
@@ -235,9 +243,35 @@ export interface Province {
       tools: number;
       weapons: number;
       horses: number;
+      wool?: number;
+      cloth?: number;
+      clothes?: number;
+      charcoal?: number;
+      steel?: number;
+      beer?: number;
+      wine?: number;
+      fish?: number;
+      meat?: number;
+      salt?: number;
+      clay?: number;
+      armor?: number;
+      luxury?: number;
     };
   };
   visualLevel?: number;
+  cityTier?: { id: number; name: string; description: string };
+  professions?: {
+    farmers: number;
+    lumberjacks: number;
+    miners: number;
+    smiths: number;
+    merchants: number;
+    priests: number;
+    teachers: number;
+    soldiers: number;
+    nobles: number;
+    workers: number;
+  };
   forestStock?: number;
   mineStock?: number;
 }
@@ -275,6 +309,7 @@ export interface BattleResult {
 export interface GameState {
   kingdom: { id: string; name: string; resources: Resources };
   dynasty: DynastyInfo;
+  capitalProvinceId?: string;
   provinces: Province[];
   armies: Army[];
   recentBattles: Battle[];

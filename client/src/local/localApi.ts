@@ -23,6 +23,14 @@ import {
   recalcDevStats,
   defaultDevStats,
   computeSettlementVisualLevel,
+  migrateStock,
+  constructionTicks,
+  advanceConstruction,
+  autoTradeBetween,
+  computeCityTier,
+  countProfessions,
+  upgradeCostMultiplier,
+  hasAdjacentRoad,
   type CityTile,
   type ProvinceDevStats,
 } from '@kronenchronik/shared';
@@ -105,6 +113,8 @@ interface GameSave {
     influence: number;
     fame: number;
   };
+  /** Hauptstadt-Provinz (Herz des Reiches) */
+  capitalProvinceId?: string;
   provinces: SaveProvince[];
   armies: SaveArmy[];
   battles: Battle[];
@@ -157,9 +167,25 @@ function ensureProvinceDev(p: SaveProvince) {
   }
   if (!p.devStats) {
     p.devStats = defaultDevStats();
+  } else {
+    p.devStats.stock = migrateStock(p.devStats.stock);
+    if (p.devStats.taxRate === undefined) p.devStats.taxRate = 30;
   }
   if (p.forestStock === undefined) p.forestStock = 1000;
   if (p.mineStock === undefined) p.mineStock = 800;
+}
+
+/** Gebäude brauchen Straße – Felder/Mauern/Brunnen etwas lockerer */
+function hasRoadOrIsRoad(
+  tiles: CityTile[],
+  x: number,
+  y: number,
+  kind: CityTileKind,
+): boolean {
+  const def = CITY_TILE_DEFS[kind];
+  if (kind === CityTileKind.ROAD || def.category === 'field' || def.category === 'wall') return true;
+  if (kind === CityTileKind.WELL || kind === CityTileKind.HOUSE) return true;
+  return hasAdjacentRoad(tiles, x, y);
 }
 
 function loadSave(userId: string): GameSave | null {
@@ -246,6 +272,7 @@ function createNewSave(kingdomName: string, rulerName: string): GameSave {
       name: kingdomName,
       ...STARTING_RESOURCES,
     },
+    capitalProvinceId: startProvince.id,
     provinces,
     armies,
     battles: [],
@@ -328,6 +355,7 @@ function createNewSave(kingdomName: string, rulerName: string): GameSave {
 
 function toGameState(save: GameSave): GameState {
   const kid = save.kingdom.id;
+  const capitalId = save.capitalProvinceId ?? save.provinces.find((p) => p.ownerId === kid)?.id;
   return {
     kingdom: {
       id: save.kingdom.id,
@@ -343,47 +371,62 @@ function toGameState(save: GameSave): GameState {
       },
     },
     dynasty: save.dynasty,
-    provinces: save.provinces.map((p) => ({
-      id: p.id,
-      slug: p.slug,
-      name: p.name,
-      x: p.x,
-      y: p.y,
-      terrain: p.terrain,
-      culture: p.culture,
-      religion: p.religion,
-      population: p.population,
-      prosperity: p.prosperity,
-      defense: p.defense,
-      ownerId: p.ownerId,
-      ownerName: p.ownerName,
-      isOwned: p.ownerId === kid,
-      castle: p.castle,
-      village: p.village,
-      city: p.city,
-      buildings: p.buildings,
-      armies: save.armies
-        .filter((a) => a.provinceId === p.id)
-        .map((a) => ({
-          id: a.id,
-          name: a.name,
-          morale: a.morale,
-          isGarrison: a.isGarrison,
-          provinceId: a.provinceId,
-          units: a.units,
-        })),
-      neighbors: p.neighborSlugs.map((slug) => {
-        const n = save.provinces.find((x) => x.slug === slug)!;
-        return { id: n.id, slug: n.slug, name: n.name };
-      }),
-      cityGrid: p.cityGrid,
-      devStats: p.devStats,
-      visualLevel: p.cityGrid
-        ? computeSettlementVisualLevel(p.cityGrid, p.city?.level ?? 0, p.village?.level ?? 0)
-        : 1,
-      forestStock: p.forestStock,
-      mineStock: p.mineStock,
-    })),
+    capitalProvinceId: capitalId,
+    provinces: save.provinces.map((p) => {
+      const isCapital = p.id === capitalId;
+      const cityLevel = p.city?.level ?? 0;
+      const villageLevel = p.village?.level ?? 0;
+      const tier = p.cityGrid
+        ? computeCityTier(p.cityGrid, cityLevel, isCapital)
+        : undefined;
+      const professions = p.cityGrid ? countProfessions(p.cityGrid) : undefined;
+      return {
+        id: p.id,
+        slug: p.slug,
+        name: p.name,
+        x: p.x,
+        y: p.y,
+        terrain: p.terrain,
+        culture: p.culture,
+        religion: p.religion,
+        population: p.population,
+        prosperity: p.prosperity,
+        defense: p.defense,
+        ownerId: p.ownerId,
+        ownerName: p.ownerName,
+        isOwned: p.ownerId === kid,
+        isCapital,
+        castle: p.castle,
+        village: p.village,
+        city: p.city,
+        buildings: p.buildings,
+        armies: save.armies
+          .filter((a) => a.provinceId === p.id)
+          .map((a) => ({
+            id: a.id,
+            name: a.name,
+            morale: a.morale,
+            isGarrison: a.isGarrison,
+            provinceId: a.provinceId,
+            units: a.units,
+          })),
+        neighbors: p.neighborSlugs.map((slug) => {
+          const n = save.provinces.find((x) => x.slug === slug)!;
+          return { id: n.id, slug: n.slug, name: n.name };
+        }),
+        cityGrid: p.cityGrid,
+        devStats: p.devStats,
+        visualLevel: p.cityGrid
+          ? computeSettlementVisualLevel(p.cityGrid, cityLevel, villageLevel, isCapital)
+          : 1,
+        cityTier: tier
+          ? { id: tier.id, name: tier.name, description: tier.description }
+          : undefined,
+        professions,
+        forestStock: p.forestStock,
+        mineStock: p.mineStock,
+      };
+    }),
     armies: save.armies.map((a) => {
       const prov = save.provinces.find((p) => p.id === a.provinceId);
       return {
@@ -421,11 +464,18 @@ export function applyResourceTick(userId: string): GameState | null {
   if (now - save.lastTickAt < 25000) return toGameState(save);
 
   const kid = save.kingdom.id;
+  if (!save.capitalProvinceId) {
+    const first = save.provinces.find((p) => p.ownerId === kid);
+    if (first) save.capitalProvinceId = first.id;
+  }
   const owned = save.provinces.filter((p) => p.ownerId === kid);
 
   const totalIncome = { gold: 0, food: 0, wood: 0, stone: 0, iron: 0, influence: 0 };
   for (const p of owned) {
     ensureProvinceDev(p);
+    // Bauphasen
+    advanceConstruction(p.cityGrid!);
+
     const income = calculateProvinceIncome({
       buildings: p.buildings.map((b) => ({ type: b.type as BuildingType, level: b.level })),
       population: p.population,
@@ -447,19 +497,46 @@ export function applyResourceTick(userId: string): GameState | null {
       totalIncome.wood += chain.kingdomIncome.wood;
       totalIncome.stone += chain.kingdomIncome.stone;
       totalIncome.iron += chain.kingdomIncome.iron;
-      p.population = Math.min(50000, p.population + chain.populationDelta);
-      p.prosperity = Math.min(100, p.prosperity + chain.prosperityDelta);
+
+      // Steuern aus Bevölkerung
+      const taxRate = p.devStats.taxRate ?? 30;
+      const taxGold = Math.floor((p.population / 100) * (taxRate / 30) * (1 + (p.prosperity ?? 50) / 100));
+      totalIncome.gold += taxGold;
+
+      p.population = Math.min(50000, Math.max(50, p.population + chain.populationDelta));
+      p.prosperity = Math.min(100, Math.max(0, p.prosperity + chain.prosperityDelta));
       p.defense = Math.max(p.defense, 10 + chain.defenseBonus);
       p.devStats = recalcDevStats(p.cityGrid, p.devStats, chain);
-      // Wald/Mine erschöpfen bei Holzfällern/Minen
+
+      // Dorfwachstum: bei hoher Zufriedenheit und Nahrung
+      if (p.village && p.devStats.satisfaction > 65 && (p.devStats.stock.bread ?? 0) > 8) {
+        if (Math.random() < 0.15 && p.village.level < 5) {
+          // gelegentlich sichtbares Wachstum über Population
+          p.population += 15;
+        }
+      }
+
       const lumber = p.cityGrid.filter((t) => t.kind === CityTileKind.LUMBER_CAMP).length;
       const mines = p.cityGrid.filter((t) => t.kind === CityTileKind.MINE).length;
       p.forestStock = Math.max(0, (p.forestStock ?? 0) - lumber * 2);
       p.mineStock = Math.max(0, (p.mineStock ?? 0) - mines * 1);
       if ((p.forestStock ?? 0) < 100) totalIncome.wood = Math.floor(totalIncome.wood * 0.5);
       if ((p.mineStock ?? 0) < 80) totalIncome.iron = Math.floor(totalIncome.iron * 0.5);
-      // langsame Regenerierung
       p.forestStock = Math.min(1200, (p.forestStock ?? 0) + 1);
+    }
+  }
+
+  // Interprovinz-Handel zwischen Nachbarn
+  for (let i = 0; i < owned.length; i++) {
+    const a = owned[i];
+    if (!a.devStats) continue;
+    for (const slug of a.neighborSlugs) {
+      const b = owned.find((p) => p.slug === slug);
+      if (!b?.devStats || b.id <= a.id) continue;
+      const traded = autoTradeBetween(a.devStats.stock, b.devStats.stock);
+      a.devStats.stock = traded.a;
+      b.devStats.stock = traded.b;
+      totalIncome.gold += traded.gold;
     }
   }
 
@@ -829,6 +906,14 @@ export const localApi = {
     if (tile.kind !== CityTileKind.EMPTY && kind !== CityTileKind.ROAD) {
       throw new Error('Feld ist belegt – erst abreißen');
     }
+    // Straßenanschluss für Gebäude (außer Straßen/Felder/Mauer)
+    if (
+      def.category === 'building' &&
+      kind !== CityTileKind.CASTLE_KEEP &&
+      !hasRoadOrIsRoad(p.cityGrid!, data.x, data.y, kind)
+    ) {
+      throw new Error('Gebäude braucht Straßenanschluss');
+    }
     const cost = {
       gold: def.cost.gold,
       food: def.cost.food ?? 0,
@@ -840,9 +925,58 @@ export const localApi = {
     Object.assign(save.kingdom, subtractResources(save.kingdom, cost));
     tile.kind = kind;
     tile.level = 1;
+    const ticks = constructionTicks(kind);
+    tile.buildRemaining = ticks > 0 ? ticks : 0;
     if (def.district === 'verteidigung') {
       p.defense += kind === CityTileKind.TOWER ? 5 : kind === CityTileKind.WALL ? 2 : 3;
     }
+    return persist(userId, save);
+  },
+
+  async upgradeCityTile(data: { provinceId: string; x: number; y: number }) {
+    const { userId, save } = requireSave();
+    const p = save.provinces.find((x) => x.id === data.provinceId);
+    if (!p || p.ownerId !== save.kingdom.id) throw new Error('Provinz gehört dir nicht');
+    ensureProvinceDev(p);
+    const tile = p.cityGrid!.find((t) => t.x === data.x && t.y === data.y);
+    if (!tile || tile.kind === CityTileKind.EMPTY || tile.kind === CityTileKind.ROAD) {
+      throw new Error('Kein Gebäude zum Ausbauen');
+    }
+    if (tile.buildRemaining && tile.buildRemaining > 0) {
+      throw new Error('Gebäude wird noch gebaut');
+    }
+    const def = CITY_TILE_DEFS[tile.kind];
+    const maxLevel = tile.kind === CityTileKind.CASTLE_KEEP ? 5 : 4;
+    if (tile.level >= maxLevel) throw new Error('Maximale Ausbaustufe erreicht');
+    const mult = upgradeCostMultiplier(tile.level);
+    const cost = {
+      gold: def.cost.gold * mult,
+      food: (def.cost.food ?? 0) * mult,
+      wood: def.cost.wood * mult,
+      stone: def.cost.stone * mult,
+      iron: def.cost.iron * mult,
+    };
+    if (!canAfford(save.kingdom, cost)) throw new Error('Nicht genügend Ressourcen');
+    Object.assign(save.kingdom, subtractResources(save.kingdom, cost));
+    tile.level += 1;
+    tile.buildRemaining = Math.max(1, constructionTicks(tile.kind) - 1);
+    return persist(userId, save);
+  },
+
+  async setProvinceTax(data: { provinceId: string; taxRate: number }) {
+    const { userId, save } = requireSave();
+    const p = save.provinces.find((x) => x.id === data.provinceId);
+    if (!p || p.ownerId !== save.kingdom.id) throw new Error('Provinz gehört dir nicht');
+    ensureProvinceDev(p);
+    p.devStats!.taxRate = Math.max(0, Math.min(80, Math.round(data.taxRate)));
+    return persist(userId, save);
+  },
+
+  async setCapital(data: { provinceId: string }) {
+    const { userId, save } = requireSave();
+    const p = save.provinces.find((x) => x.id === data.provinceId);
+    if (!p || p.ownerId !== save.kingdom.id) throw new Error('Provinz gehört dir nicht');
+    save.capitalProvinceId = p.id;
     return persist(userId, save);
   },
 
@@ -856,6 +990,7 @@ export const localApi = {
     if (tile.kind === CityTileKind.CASTLE_KEEP) throw new Error('Burgfried kann nicht abgerissen werden');
     tile.kind = CityTileKind.EMPTY;
     tile.level = 1;
+    tile.buildRemaining = 0;
     return persist(userId, save);
   },
 

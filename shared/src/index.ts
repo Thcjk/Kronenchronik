@@ -11,3 +11,4 @@ export * from './tick';
 export * from './characters';
 export * from './cityGrid';
 export * from './production';
+export * from './economy';

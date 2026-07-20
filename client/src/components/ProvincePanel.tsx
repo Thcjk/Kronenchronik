@@ -162,12 +162,20 @@ export default function ProvincePanel({
 
       {isOwned && (
         <div className="space-y-3 border-t border-medieval-brown/30 pt-3">
-          <h3 className="font-semibold text-medieval-gold">Verwaltung</h3>
+          <h3 className="font-semibold text-medieval-gold">
+            Verwaltung{province.isCapital ? ' · 👑 Hauptstadt' : ''}
+          </h3>
 
           {onEnterCity && (
             <button type="button" onClick={onEnterCity} className="btn-primary w-full text-sm">
               🏙️ Stadt betreten – bauen & planen
             </button>
+          )}
+
+          {province.cityTier && (
+            <div className="text-[11px] text-parchment/70">
+              {province.cityTier.name}: {province.cityTier.description}
+            </div>
           )}
 
           {province.devStats && (
