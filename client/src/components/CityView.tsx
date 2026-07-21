@@ -38,23 +38,46 @@ const CHAINS: Array<{ title: string; steps: string[] }> = [
   { title: 'Waffen', steps: ['⛏️ Eisen', 'Holzkohle', 'Schmelze', 'Stahl', 'Schmiede', '⚔️ Waffen'] },
 ];
 
-function tileTerrainClass(kind: CityTileKind, x: number, y: number): string {
-  if (kind === CityTileKind.ROAD) return 'city-tile is-road';
-  if (kind === CityTileKind.EMPTY) {
-    const n = (x * 7 + y * 13) % 5;
-    if (n === 0) return 'city-tile is-meadow is-hill';
-    if (n === 1) return 'city-tile is-meadow is-trees';
-    return 'city-tile is-meadow';
+/** Visuelle Größe/Klasse je Gebäude – kein Kästchen-Icon */
+function buildingVisual(kind: CityTileKind, level: number): { cls: string; w: number; h: number } {
+  const lv = Math.min(5, Math.max(1, level));
+  switch (kind) {
+    case CityTileKind.CASTLE_KEEP:
+    case CityTileKind.PALACE:
+      return { cls: 'sb-keep', w: 72 + lv * 6, h: 78 + lv * 6 };
+    case CityTileKind.CATHEDRAL:
+    case CityTileKind.CHURCH:
+      return { cls: 'sb-church', w: 56 + lv * 4, h: 70 + lv * 4 };
+    case CityTileKind.MARKET:
+    case CityTileKind.TOWN_HALL:
+      return { cls: 'sb-market', w: 58 + lv * 3, h: 48 + lv * 3 };
+    case CityTileKind.HOUSE:
+    case CityTileKind.NOBLE_HOUSE:
+      return { cls: 'sb-house', w: 40 + lv * 3, h: 44 + lv * 3 };
+    case CityTileKind.FARM:
+    case CityTileKind.VINEYARD:
+    case CityTileKind.SHEEP_FARM:
+      return { cls: 'sb-farm', w: 52 + lv * 2, h: 40 + lv * 2 };
+    case CityTileKind.WALL:
+    case CityTileKind.TOWER:
+    case CityTileKind.GATE:
+      return { cls: 'sb-wall', w: 36 + lv * 2, h: 44 + lv * 3 };
+    case CityTileKind.HARBOR:
+      return { cls: 'sb-harbor', w: 64, h: 48 };
+    case CityTileKind.WINDMILL:
+    case CityTileKind.MILL:
+      return { cls: 'sb-mill', w: 44 + lv * 2, h: 56 + lv * 2 };
+    case CityTileKind.ROAD:
+      return { cls: 'sb-road', w: 36, h: 36 };
+    default:
+      return { cls: 'sb-workshop', w: 48 + lv * 2, h: 46 + lv * 2 };
   }
-  if (kind === CityTileKind.FARM || kind === CityTileKind.VINEYARD || kind === CityTileKind.SHEEP_FARM) {
-    return 'city-tile is-field';
-  }
-  if (kind === CityTileKind.WALL || kind === CityTileKind.TOWER || kind === CityTileKind.GATE) {
-    return 'city-tile is-wall';
-  }
-  return 'city-tile is-building';
 }
 
+/**
+ * Stadtansicht: organische Siedlung.
+ * Intern bleibt das Stadtgitter für Spielmechanik – sichtbar ist kein Raster.
+ */
 export default function CityView({ province, gameState, onUpdate, onBack }: CityViewProps) {
   const [selectedKind, setSelectedKind] = useState<CityTileKind>(CityTileKind.HOUSE);
   const [mode, setMode] = useState<Mode>('build');
@@ -63,20 +86,19 @@ export default function CityView({ province, gameState, onUpdate, onBack }: City
   const [error, setError] = useState('');
   const [tab, setTab] = useState<'map' | 'stats' | 'trade'>('map');
   const [taxDraft, setTaxDraft] = useState(province.devStats?.taxRate ?? 30);
-  const [hoverTile, setHoverTile] = useState<{ x: number; y: number; kind: string; level: number } | null>(
-    null,
-  );
+  const [hover, setHover] = useState<{
+    x: number;
+    y: number;
+    kind: string;
+    level: number;
+  } | null>(null);
 
   const tiles = useMemo(() => province.cityGrid ?? [], [province.cityGrid]);
   const isCapital = Boolean(province.isCapital);
   const cityLevel = province.city?.level ?? 0;
   const villageLevel = province.village?.level ?? 0;
   const visual = computeSettlementVisualLevel(
-    tiles.map((t) => ({
-      ...t,
-      kind: t.kind as CityTileKind,
-      buildRemaining: t.buildRemaining,
-    })),
+    tiles.map((t) => ({ ...t, kind: t.kind as CityTileKind, buildRemaining: t.buildRemaining })),
     cityLevel,
     villageLevel,
     isCapital,
@@ -99,11 +121,7 @@ export default function CityView({ province, gameState, onUpdate, onBack }: City
   }, [category]);
 
   const typedTiles = useMemo(
-    () =>
-      tiles.map((t) => ({
-        ...t,
-        kind: t.kind as CityTileKind,
-      })),
+    () => tiles.map((t) => ({ ...t, kind: t.kind as CityTileKind })),
     [tiles],
   );
 
@@ -122,25 +140,9 @@ export default function CityView({ province, gameState, onUpdate, onBack }: City
     countKind(typedTiles, CityTileKind.CHURCH) +
     countKind(typedTiles, CityTileKind.SCHOOL) * 2;
 
-  const grid: Array<{
-    x: number;
-    y: number;
-    kind: string;
-    level: number;
-    buildRemaining?: number;
-  }> = [];
-  for (let y = 0; y < CITY_GRID_H; y++) {
-    for (let x = 0; x < CITY_GRID_W; x++) {
-      grid.push(
-        tiles.find((t) => t.x === x && t.y === y) ?? {
-          x,
-          y,
-          kind: 'EMPTY',
-          level: 1,
-        },
-      );
-    }
-  }
+  const cell = 48;
+  const mapW = CITY_GRID_W * cell;
+  const mapH = CITY_GRID_H * cell;
 
   const def = CITY_TILE_DEFS[selectedKind];
   const softBlockers = useMemo(
@@ -157,9 +159,6 @@ export default function CityView({ province, gameState, onUpdate, onBack }: City
     if (msg.includes('Straßen')) return '❌ Straße fehlt';
     if (msg.includes('Stadtstufe')) return `❌ ${msg}`;
     if (msg.includes('Ressourcen')) return '❌ Nicht genügend Ressourcen';
-    if (msg.includes('Bevölkerung')) return '❌ Zu wenig Bevölkerung';
-    if (msg.includes('Arbeiter')) return '❌ Kein freier Arbeiter';
-    if (msg.includes('Forschung')) return '❌ Forschung fehlt';
     return msg.startsWith('❌') ? msg : `❌ ${msg}`;
   };
 
@@ -202,8 +201,7 @@ export default function CityView({ province, gameState, onUpdate, onBack }: City
     setLoading(true);
     setError('');
     try {
-      const state = await api.setProvinceTax({ provinceId: province.id, taxRate: taxDraft });
-      onUpdate(state);
+      onUpdate(await api.setProvinceTax({ provinceId: province.id, taxRate: taxDraft }));
     } catch (e) {
       setError(mapError(e instanceof Error ? e.message : 'Fehler'));
     } finally {
@@ -215,14 +213,16 @@ export default function CityView({ province, gameState, onUpdate, onBack }: City
     setLoading(true);
     setError('');
     try {
-      const state = await api.setCapital({ provinceId: province.id });
-      onUpdate(state);
+      onUpdate(await api.setCapital({ provinceId: province.id }));
     } catch (e) {
       setError(mapError(e instanceof Error ? e.message : 'Fehler'));
     } finally {
       setLoading(false);
     }
   };
+
+  // Straßen als durchgehende Pfade
+  const roadTiles = typedTiles.filter((t) => t.kind === CityTileKind.ROAD);
 
   return (
     <div className="h-full flex flex-col bg-ink">
@@ -237,14 +237,14 @@ export default function CityView({ province, gameState, onUpdate, onBack }: City
               {province.name}
             </div>
             <div className="text-[10px] text-parchment/60">
-              {title} · Stufe {visual}/7 · {province.population} Einwohner
+              {title} · {province.population} Einwohner · Wohnraum {housing} · Arbeit {jobs}
             </div>
           </div>
         </div>
         <div className="flex gap-1">
           {(
             [
-              ['map', 'Stadtplan'],
+              ['map', 'Siedlung'],
               ['stats', 'Verwaltung'],
               ['trade', 'Handel'],
             ] as const
@@ -316,17 +316,9 @@ export default function CityView({ province, gameState, onUpdate, onBack }: City
             </p>
             <p className="text-[11px] text-parchment/60">{look.description}</p>
             {!isCapital && (
-              <button
-                type="button"
-                className="btn-primary text-xs mt-2"
-                disabled={loading}
-                onClick={makeCapital}
-              >
+              <button type="button" className="btn-primary text-xs mt-2" disabled={loading} onClick={makeCapital}>
                 Zur Hauptstadt machen
               </button>
-            )}
-            {isCapital && (
-              <p className="text-[11px] text-gold mt-2">Herz des Reiches – wächst sichtbar mit jeder Stufe.</p>
             )}
           </div>
 
@@ -353,19 +345,11 @@ export default function CityView({ province, gameState, onUpdate, onBack }: City
                   ['🌾 Getreide', stock?.grain],
                   ['⚙️ Mehl', stock?.flour],
                   ['🍞 Brot', stock?.bread],
-                  ['🐟 Fisch', stock?.fish],
-                  ['🥩 Fleisch', stock?.meat],
-                  ['🪵 Bretter', stock?.planks],
                   ['🔧 Werkzeuge', stock?.tools],
-                  ['🐑 Wolle', stock?.wool],
+                  ['⚔️ Waffen', stock?.weapons],
                   ['🧵 Stoff', stock?.cloth],
                   ['👔 Kleidung', stock?.clothes],
-                  ['🔥 Holzkohle', stock?.charcoal],
-                  ['⚙️ Stahl', stock?.steel],
-                  ['⚔️ Waffen', stock?.weapons],
-                  ['🛡️ Rüstung', stock?.armor],
                   ['🍺 Bier', stock?.beer],
-                  ['🍇 Wein', stock?.wine],
                 ] as const
               ).map(([label, val]) => (
                 <div key={label} className="bg-black/40 rounded p-2 border border-gold/15">
@@ -377,10 +361,7 @@ export default function CityView({ province, gameState, onUpdate, onBack }: City
           </div>
 
           <div className="panel p-3">
-            <div className="panel-header">Steuern des Herrschers</div>
-            <p className="text-[11px] text-parchment/60 mb-2">
-              Hohe Steuern = mehr Gold, weniger Zufriedenheit. Ideal um 30.
-            </p>
+            <div className="panel-header">Steuern</div>
             <div className="flex items-center gap-2">
               <input
                 type="range"
@@ -408,10 +389,6 @@ export default function CityView({ province, gameState, onUpdate, onBack }: City
                     ['Bergleute', professions.miners],
                     ['Schmiede', professions.smiths],
                     ['Händler', professions.merchants],
-                    ['Priester', professions.priests],
-                    ['Lehrer', professions.teachers],
-                    ['Soldaten', professions.soldiers],
-                    ['Adelige', professions.nobles],
                     ['Handwerker', professions.workers],
                   ] as const
                 ).map(([label, n]) => (
@@ -425,15 +402,12 @@ export default function CityView({ province, gameState, onUpdate, onBack }: City
           )}
         </div>
       ) : tab === 'trade' ? (
-        <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        <div className="flex-1 overflow-y-auto p-3">
           <div className="panel p-3">
-            <div className="panel-header">Automatischer Handel</div>
-            <p className="text-xs text-parchment/70 mb-2">
-              Benachbarte eigene Provinzen tauschen Überschüsse und erzeugen Gold.
-            </p>
-            <div className="text-[11px] text-parchment/60">
+            <div className="panel-header">Handel</div>
+            <p className="text-xs text-parchment/70">
               Nachbarn: {province.neighbors.map((n) => n.name).join(', ') || 'keine'}
-            </div>
+            </p>
           </div>
         </div>
       ) : (
@@ -480,7 +454,6 @@ export default function CityView({ province, gameState, onUpdate, onBack }: City
                   {palette.map((kind) => {
                     const d = CITY_TILE_DEFS[kind];
                     const locked = cityLevel < d.minCityLevel;
-                    const costLine = formatBuildCost(kind);
                     return (
                       <button
                         key={kind}
@@ -496,11 +469,10 @@ export default function CityView({ province, gameState, onUpdate, onBack }: City
                           <span className="font-display text-[11px] text-gold">{d.name}</span>
                         </div>
                         <div className="build-meta">
-                          <span>💰 {costLine || 'kostenlos'}</span>
+                          <span>💰 {formatBuildCost(kind) || '–'}</span>
                           <span>⏱ {buildTimeLabel(kind)}</span>
                           <span>👷 {buildingJobsHint(kind)}</span>
                           <span>📦 {buildingProducesHint(kind)}</span>
-                          {d.minCityLevel > 0 && <span>🏛 Stadt {d.minCityLevel}+</span>}
                         </div>
                       </button>
                     );
@@ -512,15 +484,8 @@ export default function CityView({ province, gameState, onUpdate, onBack }: City
                     <div className="text-[10px] text-parchment/70 space-y-0.5">
                       <div>Kosten: {formatBuildCost(selectedKind) || '–'}</div>
                       <div>Bauzeit: {buildTimeLabel(selectedKind)}</div>
-                      <div>Arbeit / Wirkung: {buildingJobsHint(selectedKind)}</div>
+                      <div>Arbeit: {buildingJobsHint(selectedKind)}</div>
                       <div>Produziert: {buildingProducesHint(selectedKind)}</div>
-                      <div>
-                        Voraussetzung:{' '}
-                        {def.minCityLevel > 0 ? `Stadtstufe ${def.minCityLevel}` : 'keine Stadtstufe'}
-                        {def.category === 'building' && selectedKind !== CityTileKind.CASTLE_KEEP
-                          ? ' · Straßenanschluss'
-                          : ''}
-                      </div>
                     </div>
                     {softBlockers.length > 0 && (
                       <ul className="mt-2 space-y-0.5 text-[10px] text-red-200">
@@ -533,76 +498,160 @@ export default function CityView({ province, gameState, onUpdate, onBack }: City
                 )}
               </>
             )}
-            {mode === 'upgrade' && (
-              <p className="text-[11px] text-parchment/60">
-                Klicke ein fertiges Gebäude an, um die Stufe zu erhöhen (Produktion & Aussehen).
-                Max. Stufe 4 (Burgfried 5).
-              </p>
-            )}
           </div>
 
           <div
-            className="flex-1 min-h-0 overflow-auto p-2 flex flex-col items-center"
+            className="flex-1 min-h-0 overflow-auto p-3 flex flex-col items-center"
             style={{
               background: `
-                linear-gradient(180deg, ${look.sky} 0%, transparent 45%),
-                radial-gradient(ellipse at 50% 80%, ${look.ground} 0%, #1a2a18 100%)
+                radial-gradient(ellipse at 30% 20%, ${look.sky}88 0%, transparent 50%),
+                linear-gradient(180deg, #3a5a40 0%, #2a4a30 40%, #1e3a24 100%)
               `,
             }}
           >
-            <div className="city-landscape-frame">
-              <div
-                className="city-landscape-grid"
-                style={{
-                  gridTemplateColumns: `repeat(${CITY_GRID_W}, minmax(32px, 40px))`,
-                }}
-              >
-                {grid.map((tile) => {
-                  const kind = tile.kind as CityTileKind;
-                  const d = CITY_TILE_DEFS[kind] ?? CITY_TILE_DEFS[CityTileKind.EMPTY];
-                  const building = Boolean(tile.buildRemaining && tile.buildRemaining > 0);
-                  const cls = tileTerrainClass(kind, tile.x, tile.y);
+            <div className="settlement-stage" style={{ width: mapW + 48, height: mapH + 48 }}>
+              {/* Landschaftsgrund – kein Raster */}
+              <svg className="settlement-ground" width={mapW + 48} height={mapH + 48}>
+                <defs>
+                  <pattern id="meadowGrain" width="24" height="24" patternUnits="userSpaceOnUse">
+                    <circle cx="4" cy="8" r="1.2" fill="rgba(40,80,30,0.15)" />
+                    <circle cx="16" cy="14" r="0.9" fill="rgba(60,100,40,0.12)" />
+                  </pattern>
+                </defs>
+                <ellipse
+                  cx={(mapW + 48) / 2}
+                  cy={(mapH + 48) / 2}
+                  rx={mapW * 0.52}
+                  ry={mapH * 0.52}
+                  fill="#5a8a4a"
+                />
+                <ellipse
+                  cx={(mapW + 48) / 2}
+                  cy={(mapH + 48) / 2}
+                  rx={mapW * 0.52}
+                  ry={mapH * 0.52}
+                  fill="url(#meadowGrain)"
+                />
+                {/* Bach */}
+                <path
+                  d={`M 20 ${mapH * 0.7} Q ${mapW * 0.4} ${mapH * 0.55}, ${mapW * 0.7} ${mapH * 0.75} T ${mapW + 20} ${mapH * 0.6}`}
+                  fill="none"
+                  stroke="#6a9aaa"
+                  strokeWidth="10"
+                  opacity="0.55"
+                  strokeLinecap="round"
+                />
+                {/* Hügel */}
+                <path
+                  d={`M ${mapW * 0.1} ${mapH * 0.25} Q ${mapW * 0.2} ${mapH * 0.05}, ${mapW * 0.35} ${mapH * 0.28}`}
+                  fill="none"
+                  stroke="#4a7040"
+                  strokeWidth="14"
+                  opacity="0.4"
+                  strokeLinecap="round"
+                />
+                {/* Straßennetz als organische Linien */}
+                {roadTiles.map((r) => {
+                  const px = 24 + r.x * cell + cell / 2;
+                  const py = 24 + r.y * cell + cell / 2;
                   return (
-                    <button
-                      key={`${tile.x}-${tile.y}`}
-                      type="button"
-                      disabled={loading}
-                      onClick={() => handleTileClick(tile.x, tile.y)}
-                      onMouseEnter={() => setHoverTile(tile)}
-                      onMouseLeave={() => setHoverTile(null)}
-                      className={`${cls}${building ? ' is-building-site' : ''}${tile.level > 1 ? ` lv-${tile.level}` : ''}`}
-                      title={`${d.name} Lv${tile.level}${building ? ` (Bau: ${tile.buildRemaining})` : ''}`}
-                    >
-                      <span className="city-tile-art">
-                        {kind === CityTileKind.EMPTY ? (
-                          <span className="city-tile-empty-mark" />
-                        ) : (
-                          <span className={`city-building-glyph lv-${tile.level}`}>{d.icon}</span>
-                        )}
-                      </span>
-                      {!building && tile.level > 1 && kind !== CityTileKind.EMPTY && kind !== CityTileKind.ROAD && (
-                        <span className="city-tile-level">{tile.level}</span>
-                      )}
-                      {building && <span className="city-tile-build">{tile.buildRemaining}</span>}
-                      {tile.level >= 2 && kind !== CityTileKind.EMPTY && kind !== CityTileKind.ROAD && !building && (
-                        <span className="city-tile-smoke" aria-hidden />
-                      )}
-                    </button>
+                    <circle key={`rd-${r.x}-${r.y}`} cx={px} cy={py} r={cell * 0.42} fill="#a89060" opacity="0.85" />
                   );
                 })}
+                {roadTiles.map((r) => {
+                  const dirs = [
+                    [1, 0],
+                    [0, 1],
+                  ];
+                  return dirs.map(([dx, dy]) => {
+                    const n = roadTiles.find((t) => t.x === r.x + dx && t.y === r.y + dy);
+                    if (!n) return null;
+                    const x1 = 24 + r.x * cell + cell / 2;
+                    const y1 = 24 + r.y * cell + cell / 2;
+                    const x2 = 24 + n.x * cell + cell / 2;
+                    const y2 = 24 + n.y * cell + cell / 2;
+                    return (
+                      <line
+                        key={`rl-${r.x}-${r.y}-${dx}-${dy}`}
+                        x1={x1}
+                        y1={y1}
+                        x2={x2}
+                        y2={y2}
+                        stroke="#8a7348"
+                        strokeWidth={cell * 0.55}
+                        strokeLinecap="round"
+                        opacity="0.9"
+                      />
+                    );
+                  });
+                })}
+              </svg>
+
+              {/* Klickbare Bauflächen – unsichtbar außer Hover */}
+              <div className="settlement-hitgrid" style={{ width: mapW, height: mapH }}>
+                {Array.from({ length: CITY_GRID_H }, (_, y) =>
+                  Array.from({ length: CITY_GRID_W }, (_, x) => {
+                    const tile =
+                      tiles.find((t) => t.x === x && t.y === y) ?? {
+                        x,
+                        y,
+                        kind: 'EMPTY',
+                        level: 1,
+                      };
+                    const kind = tile.kind as CityTileKind;
+                    const d = CITY_TILE_DEFS[kind] ?? CITY_TILE_DEFS[CityTileKind.EMPTY];
+                    const building = Boolean(tile.buildRemaining && tile.buildRemaining > 0);
+                    const vis = buildingVisual(kind, tile.level);
+                    const isEmpty = kind === CityTileKind.EMPTY;
+                    const isRoad = kind === CityTileKind.ROAD;
+
+                    return (
+                      <button
+                        key={`${x}-${y}`}
+                        type="button"
+                        disabled={loading}
+                        className={`settlement-plot${isEmpty ? ' is-empty' : ''}${isRoad ? ' is-road' : ''}${
+                          !isEmpty && !isRoad ? ' has-building' : ''
+                        }${building ? ' is-building' : ''}`}
+                        style={{
+                          left: x * cell,
+                          top: y * cell,
+                          width: cell,
+                          height: cell,
+                        }}
+                        onClick={() => handleTileClick(x, y)}
+                        onMouseEnter={() => setHover(tile)}
+                        onMouseLeave={() => setHover(null)}
+                        title={`${d.name}${tile.level > 1 ? ` Lv${tile.level}` : ''}`}
+                      >
+                        {!isEmpty && !isRoad && (
+                          <span
+                            className={`settlement-building ${vis.cls} lv-${tile.level}`}
+                            style={{ width: vis.w * 0.72, height: vis.h * 0.72 }}
+                          >
+                            <span className="sb-roof" />
+                            <span className="sb-body">{d.icon}</span>
+                            <span className="sb-shadow" />
+                            {tile.level > 1 && <span className="sb-level">{tile.level}</span>}
+                            {building && <span className="sb-build">{tile.buildRemaining}</span>}
+                            {tile.level >= 2 && !building && <span className="sb-smoke" />}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  }),
+                )}
               </div>
             </div>
 
-            {hoverTile && (
+            {hover && (
               <div className="city-tooltip mt-2">
                 <div className="font-display text-gold text-xs">
-                  {(CITY_TILE_DEFS[hoverTile.kind as CityTileKind] ?? CITY_TILE_DEFS[CityTileKind.EMPTY]).name}
-                  {hoverTile.level > 1 ? ` · Stufe ${hoverTile.level}` : ''}
+                  {(CITY_TILE_DEFS[hover.kind as CityTileKind] ?? CITY_TILE_DEFS[CityTileKind.EMPTY]).name}
+                  {hover.level > 1 ? ` · Stufe ${hover.level}` : ''}
                 </div>
                 <div className="text-[10px] text-parchment/70">
-                  {buildingProducesHint(hoverTile.kind as CityTileKind)}
-                  {' · '}
-                  {buildingJobsHint(hoverTile.kind as CityTileKind)}
+                  {buildingProducesHint(hover.kind as CityTileKind)} · {buildingJobsHint(hover.kind as CityTileKind)}
                 </div>
               </div>
             )}
