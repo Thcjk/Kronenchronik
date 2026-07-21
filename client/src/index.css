@@ -180,16 +180,15 @@ h3,
 }
 
 .world-map-shell {
-  background:
-    radial-gradient(ellipse at 45% 28%, #e8d4a8 0%, #d4bc8a 42%, #b89a68 100%);
+  background: #c9b07a;
 }
 
-.parchment-map {
-  box-shadow: inset 0 0 80px rgba(80, 50, 20, 0.18);
+.parchment-map-v2 {
+  box-shadow: inset 0 0 100px rgba(80, 50, 20, 0.22);
 }
 
-.parchment-svg {
-  filter: contrast(1.02) saturate(0.92);
+.parchment-map-v2 canvas {
+  display: block;
 }
 
 .map-label {
@@ -201,10 +200,6 @@ h3,
 .map-icon {
   pointer-events: none;
   user-select: none;
-}
-
-.map-settlement-art {
-  pointer-events: none;
 }
 
 /* Ressourcen-HUD */
@@ -326,153 +321,194 @@ h3,
   color: #f0a0a0;
 }
 
-/* Stadtansicht Landschaft */
-.city-landscape-frame {
-  padding: 0.75rem;
-  border-radius: 6px;
+/* Organische Stadtansicht – kein sichtbares Raster */
+.settlement-stage {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
   border: 1px solid rgba(212, 175, 55, 0.35);
-  background:
-    linear-gradient(180deg, rgba(70, 110, 70, 0.25), rgba(40, 70, 40, 0.15)),
-    repeating-linear-gradient(
-      90deg,
-      transparent,
-      transparent 18px,
-      rgba(255, 255, 255, 0.02) 18px,
-      rgba(255, 255, 255, 0.02) 19px
-    );
   box-shadow:
-    inset 0 0 40px rgba(20, 40, 20, 0.35),
-    0 12px 40px rgba(0, 0, 0, 0.45);
+    inset 0 0 60px rgba(20, 50, 20, 0.35),
+    0 16px 48px rgba(0, 0, 0, 0.5);
+  background: #3a6a40;
 }
 
-.city-landscape-grid {
-  display: inline-grid;
-  gap: 2px;
+.settlement-ground {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 
-.city-tile {
-  aspect-ratio: 1;
+.settlement-hitgrid {
+  position: absolute;
+  left: 24px;
+  top: 24px;
+}
+
+.settlement-plot {
+  position: absolute;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 1;
+}
+
+.settlement-plot.is-empty:hover {
+  background: rgba(255, 230, 160, 0.12);
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.35);
+}
+
+.settlement-plot.has-building {
+  z-index: 2;
+}
+
+.settlement-plot.has-building:hover {
+  z-index: 5;
+}
+
+.settlement-building {
   position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  border-radius: 3px;
-  border: 1px solid transparent;
-  transition: transform 0.12s ease, filter 0.12s ease;
-  cursor: pointer;
-  overflow: hidden;
+  justify-content: flex-end;
+  transform: translateY(4px);
+  transition: transform 0.15s ease;
+  filter: drop-shadow(0 3px 2px rgba(0, 0, 0, 0.35));
 }
 
-.city-tile:hover {
-  transform: scale(1.08);
+.settlement-plot:hover .settlement-building {
+  transform: translateY(0) scale(1.06);
+}
+
+.sb-body {
+  font-size: 1.35rem;
+  line-height: 1;
   z-index: 2;
-  filter: brightness(1.08);
+  position: relative;
 }
 
-.city-tile.is-meadow {
-  background:
-    linear-gradient(160deg, #4a7a3c 0%, #3a6a30 55%, #2e5528 100%);
-  border-color: rgba(80, 120, 60, 0.35);
-}
-
-.city-tile.is-meadow.is-hill {
-  background: linear-gradient(160deg, #5a8050, #4a6a38);
-}
-
-.city-tile.is-meadow.is-trees::after {
-  content: '';
+.sb-roof {
   position: absolute;
-  width: 30%;
-  height: 30%;
-  border-radius: 50% 50% 40% 40%;
-  background: #2d4a22;
-  opacity: 0.55;
-  top: 20%;
+  top: 8%;
+  left: 10%;
+  right: 10%;
+  height: 28%;
+  background: linear-gradient(180deg, #6b5344, #4a3a2c);
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  opacity: 0.9;
+  z-index: 1;
+}
+
+.sb-shadow {
+  position: absolute;
+  bottom: -2px;
+  left: 15%;
   right: 15%;
+  height: 6px;
+  background: rgba(40, 30, 20, 0.35);
+  border-radius: 50%;
+  z-index: 0;
 }
 
-.city-tile.is-road {
-  background: linear-gradient(180deg, #a89060, #8a7348);
-  border-color: rgba(140, 110, 60, 0.5);
-  box-shadow: inset 0 0 0 1px rgba(60, 40, 20, 0.25);
+.settlement-building.sb-keep {
+  background: linear-gradient(180deg, #8b7355 30%, #5c4a38 100%);
+  border-radius: 4px 4px 2px 2px;
+  border: 1px solid #3d2914;
 }
 
-.city-tile.is-field {
-  background:
-    repeating-linear-gradient(
-      90deg,
-      #c4a86a 0 3px,
-      #b89858 3px 6px
-    );
-  border-color: rgba(140, 110, 50, 0.4);
+.settlement-building.sb-church {
+  background: linear-gradient(180deg, #9a8a70 20%, #6b5a48 100%);
+  border-radius: 3px;
+  border: 1px solid #3d2914;
 }
 
-.city-tile.is-wall {
-  background: linear-gradient(180deg, #8a8680, #6a6560);
-  border-color: rgba(80, 80, 80, 0.5);
+.settlement-building.sb-house {
+  background: linear-gradient(180deg, #c4a574 25%, #8b7355 100%);
+  border-radius: 2px;
+  border: 1px solid #4a3420;
 }
 
-.city-tile.is-building {
-  background: linear-gradient(180deg, #6b5344 0%, #4a3a2c 100%);
-  border-color: rgba(212, 175, 55, 0.35);
-  box-shadow:
-    0 2px 0 rgba(0, 0, 0, 0.35),
-    inset 0 1px 0 rgba(255, 230, 160, 0.12);
+.settlement-building.sb-market {
+  background: linear-gradient(180deg, #c9a22755, #8b6914aa);
+  border-radius: 50% 50% 4px 4px;
+  border: 1px solid #c9a227;
 }
 
-.city-tile.is-building-site {
-  outline: 1px dashed rgba(232, 197, 71, 0.7);
+.settlement-building.sb-farm {
+  background: linear-gradient(180deg, #c4a86a, #8a7348);
+  border-radius: 2px;
+  border: 1px solid #6b5344;
 }
 
-.city-building-glyph {
-  font-size: 1.05rem;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45));
-  transform: scale(1);
+.settlement-building.sb-workshop {
+  background: linear-gradient(180deg, #7a6550, #4a3a2c);
+  border-radius: 3px;
+  border: 1px solid #3d2914;
 }
 
-.city-building-glyph.lv-2 {
-  transform: scale(1.08);
-}
-.city-building-glyph.lv-3 {
-  transform: scale(1.16);
-}
-.city-building-glyph.lv-4,
-.city-building-glyph.lv-5 {
-  transform: scale(1.24);
-  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.5));
+.settlement-building.sb-wall {
+  background: linear-gradient(180deg, #8a8680, #5a5550);
+  border-radius: 2px;
+  border: 1px solid #3a3835;
 }
 
-.city-tile-level {
+.settlement-building.sb-mill {
+  background: linear-gradient(180deg, #a89070, #6b5344);
+  border-radius: 50% 50% 3px 3px;
+  border: 1px solid #4a3420;
+}
+
+.settlement-building.sb-harbor {
+  background: linear-gradient(180deg, #6a8a9a, #4a6570);
+  border-radius: 3px;
+  border: 1px solid #3a5058;
+}
+
+.settlement-building.lv-3 .sb-body,
+.settlement-building.lv-4 .sb-body,
+.settlement-building.lv-5 .sb-body {
+  font-size: 1.55rem;
+}
+
+.sb-level {
   position: absolute;
   bottom: 0;
   right: 0;
   font-size: 0.55rem;
-  line-height: 1;
-  padding: 0.05rem 0.2rem;
-  background: rgba(0, 0, 0, 0.65);
+  background: rgba(0, 0, 0, 0.7);
   color: var(--color-gold);
+  padding: 0 3px;
+  z-index: 3;
 }
 
-.city-tile-build {
+.sb-build {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  font-size: 0.55rem;
-  color: #f5e6a3;
   background: rgba(0, 0, 0, 0.4);
+  color: #f5e6a3;
+  font-size: 0.6rem;
+  z-index: 3;
 }
 
-.city-tile-smoke {
+.sb-smoke {
   position: absolute;
-  top: 2px;
-  left: 40%;
-  width: 4px;
-  height: 4px;
+  top: 0;
+  left: 45%;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
-  background: rgba(180, 180, 180, 0.5);
+  background: rgba(180, 180, 180, 0.55);
   animation: smokeRise 3s ease-out infinite;
+  z-index: 4;
 }
 
 .city-tooltip {
